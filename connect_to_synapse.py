@@ -28,6 +28,17 @@ def get_synapse_teams(user_id):
   response = requests.get(endpoint).json()
   return(response)
   
+def get_synapse_projects(access_token):
+  
+  endpoint = "https://repo-prod.prod.sagebase.org/repo/v1/projects/"
+  headers = {"Authorization": "Bearer " + access_token}
+  response = requests.get(endpoint).json()
+  return(response)
+  
+def fetch_synapse_filepath(entity_id):
+  entity = syn.get(entity_id, downloadLocation='data', ifcollision='overwrite.local')
+  return(entity.path)
+  
 def create_prod_client():
   
   client_meta_data = {

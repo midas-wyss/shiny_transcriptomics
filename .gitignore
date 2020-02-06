@@ -1,9 +1,11 @@
 .DS_Store
+www/.DS_Store
 
 .Renviron
-rsconnect/
-*.Rproj
 .Rhistory
-
-www/.DS_Store
+*.Rproj
 .Rproj.user
+
+rsconnect/
+cache/
+data/
