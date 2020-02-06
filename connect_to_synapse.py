@@ -22,6 +22,11 @@ def get_synapse_userinfo(access_token):
   response = requests.get(endpoint, headers=headers).json()
   return(response)
   
+def get_synapse_user_profile():
+  
+  response = syn.getUserProfile()
+  return(response)
+  
 def get_synapse_teams(user_id):
   
   endpoint = "https://repo-prod.prod.sagebase.org/repo/v1/user/" + user_id + "/team"

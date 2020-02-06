@@ -57,7 +57,7 @@ server <- function(input, output, session) {
   
   # Click on the 'Log in' button to kick off the OAuth round trip
   observeEvent(input$action, {
-    session$sendCustomMessage("mymessage", oauth2.0_authorize_url(API, APP, scope = SCOPE))
+    session$sendCustomMessage("customredirect", oauth2.0_authorize_url(API, APP, scope = SCOPE))
     return()
   })
   
@@ -94,6 +94,9 @@ server <- function(input, output, session) {
   user_content_formatted = paste(lapply(names(user_response), 
                                         function(n) paste(n, user_response[n])), collapse="\n")
   
+  # Get user profile
+  profile_response <- get_synapse_user_profile()
+  
   # Get the user's teams
   teams_response <- get_synapse_teams(user_id)
   teams = unlist(lapply(teams_response$results, function(l) paste0(l$name, ' (', l$id, ')')))
@@ -108,10 +111,11 @@ server <- function(input, output, session) {
   
   # Cache responses
   if (DEBUG){
-    saveRDS(token_request, 'cache/token_request.rds')
+    saveRDS(token_response, 'cache/token_response.rds')
     saveRDS(user_response, 'cache/user_response.rds')
     saveRDS(teams_response, 'cache/teams_response.rds')
     saveRDS(projects_response, 'cache/projects_response.rds')
+    saveRDS(profile_response, 'cache/profile_response.rds')
   }
   
   output$userInfo <- renderText(user_content_formatted)
@@ -120,8 +124,26 @@ server <- function(input, output, session) {
   
   # ---------------------------- Menus --------------------------------- #
   
-  # Modal
-  observeEvent(input$info, {
+  # Logout modal
+  observeEvent(input$user_account_modal, {
+    showModal(
+      modalDialog(title = "Synapse Account Information",
+                  p(profile_response$firstName),
+                  p(profile_response$lastName),
+                  p(profile_response$company),
+                  easyClose = T,
+                  footer = tagList(
+                    modalButton("Back to Analysis"),
+                    actionButton("button_view_syn_profile", "View Profile on Synapse",
+                                 onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')")),
+                    actionButton("button_logout", "Log Out",
+                                 onclick = paste0("window.open('", APP_URL, "')"))
+                  ))
+    )
+  })
+  
+  # Project info modal
+  observeEvent(input$info_modal, {
     showModal(modalDialog(
       title = 'Selecting a Synapse Project',
       "The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some projects may not be enabled for this app. Contact Rani Powers / the Predictive BioAnalytics group (midas@wyss.harvard.edu) if you have any questions.",
@@ -132,7 +154,7 @@ server <- function(input, output, session) {
   
   output$logged_user <- renderText({
     if(logged_in()){
-      return(paste0('Welcome, ', user_response$given_name, '!'))
+      return(paste0('Welcome, ', profile_response$firstName, '!'))
     }
   })
   
