@@ -8,7 +8,7 @@ addResourcePath(prefix = 'www', directoryPath = paste0(getwd(), '/www'))
 
 # We'll do a dynamic redirect after authenticating
 # https://stackoverflow.com/questions/57755830/how-to-redirect-to-a-dynamic-url-in-shiny
-jscode <- "Shiny.addCustomMessageHandler('mymessage', function(message) { window.location = message;});"
+jscode <- "Shiny.addCustomMessageHandler('customredirect', function(message) { window.location = message;});"
 
 # Plot color palettes
 PLOT_COLORS <- brewer.pal(11, 'Spectral')
@@ -17,24 +17,38 @@ PLOT_SHAPES <- 21:25
 # ------------------------------- Pre-login UI ------------------------------ #
 
 AnonymousUI <- fluidPage(
-  theme = 'bootstrap.yeti.css',
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "bootstrap_rani.css")
+  ),
   title = 'Shiny Synapse Auth Example App',
   
+  h1('Transcriptomics Explorer'),
+  
   # Logo
-  div(img(src = paste0('www/logo.png'), width = '300px'),
-      style='text-align: center;'),
-  br(),
+  #div(img(src = paste0('www/logo.png'), width = '300px'),
+  #    style='text-align: center;'),
+  #br(),
+  
+  # DNA
+  HTML('<div id="dna">
+    <div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div>
+    </div>'),
   
   # Login button
   tags$head(tags$script(jscode)),
   div(actionButton("action", "Log in with Synapse"),
-      style='text-align: center;'),
-  br(),
+      style='text-align: center; padding-top: 300px;'),
+  div(style='padding: 50px;'),
   
-  div("Don't have a Synapse account yet? Follow the ",
-      a(href = 'https://midas-wyss.github.io/synapse_instructions_ingber.html',
-        'instructions for registering here'),
-      '.', style='text-align: center;')
+  div(p("Don't have a Synapse account yet?", style='text-align: center; font-size: 8;'),
+      p("Follow the ",
+        a(href = 'https://midas-wyss.github.io/synapse_instructions_ingber.html',
+        'instructions for registering here'), '.', style='text-align: center;'))
 )
 
 # ------------------------------ Post-login UI ------------------------------ #
@@ -46,8 +60,8 @@ AuthenticatedUI <- dashboardPage(
                   titleWidth = 250,
                   tags$li(class = "dropdown",
                           tags$li(class = "dropdown", 
-                                  textOutput("logged_user"), 
-                                  style = "padding: 15px 15px; color: #fff;"))),
+                                  actionLink("user_account_modal", textOutput("logged_user")),
+                                  style = "color: #fff;"))),
   
   dashboardSidebar(
     width = 250,
@@ -67,7 +81,7 @@ AuthenticatedUI <- dashboardPage(
                 label = 'Project',
                 selected = 'Influenza biomarkers',
                 choices = c('Influenza biomarkers')),
-    div(actionLink('info', 'What are Projects?', 
+    div(actionLink('info_modal', 'What are Projects?', 
                    style = 'color: #42B5BB;'), 
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
