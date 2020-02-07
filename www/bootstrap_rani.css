@@ -1387,7 +1387,8 @@ body {
     font-size: 15px;
     line-height: 1.4;
     color: #222222;
-    background-color: #42B5BB
+    background: rgb(66,181,187);
+    background: radial-gradient(circle, rgba(66,181,187,1) 0%, rgba(58,164,169,1) 100%);
 }
 
 input,
@@ -1584,10 +1585,11 @@ h6 .small,
 
 h1,
 .h1 {
-    font-size: 39px;
+    font-size: 40px;
     font-weight: 700;
     text-align: center;
     color: #ffffff;
+    padding-top: 20px;
 }
 
 h2,
@@ -3686,14 +3688,14 @@ fieldset[disabled] .btn {
 
 .btn-default {
     color: #ffffff;
-    background-color: #3aa4a9;
-    border-color: #3aa4a9;
+    background-color: #38a1a6;
+    border-color: #38a1a6;
     border-radius: 5px;
 }
 
 .btn-default:hover {
     color: #ffffff;
-    background-color: #3aa4a9;
+    background-color: #38a1a6;
     border-color: #ffffff;
     border-radius: 5px;
 }
@@ -3704,21 +3706,21 @@ fieldset[disabled] .btn {
 .btn-default.active,
 .open>.dropdown-toggle.btn-default {
     color: #ffffff;
-    background-color: #3aa4a9;
+    background-color: #38a1a6;
     border-color: #ffffff;
     border-radius: 5px;
 }
 
 .btn-default:active {
     color: #ffffff !important;
-    background-color: #3aa4a9 !important;
+    background-color: #38a1a6 !important;
     border-color: #ffffff !important;
     border-radius: 5px !important;
 }
 .btn-default.active,
 .open>.dropdown-toggle.btn-default {
     color: #ffffff;
-    background-color: #3aa4a9;
+    background-color: #38a1a6;
     border-color: #ffffff;
     border-radius: 5px;
     background-image: none
@@ -8231,12 +8233,11 @@ input[type="checkbox"] {
 /* https://codepen.io/JJsang/details/WNbYOyd */
 
 #dna {
-  position: absolute;
-  /*top: 50%;
-  left: 50%; */
-  width: 100%;
-  padding: 100px 0;
+  position: relative;
+  width: 700px;
+  margin: 100px auto;
   perspective: 1000px;
+  padding: 100px 0;
 }
 #dna div {
   position: relative;

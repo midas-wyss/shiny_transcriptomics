@@ -42,8 +42,7 @@ AnonymousUI <- fluidPage(
   # Login button
   tags$head(tags$script(jscode)),
   div(actionButton("action", "Log in with Synapse"),
-      style='text-align: center; padding-top: 300px;'),
-  div(style='padding: 50px;'),
+      style='text-align: center; padding-bottom: 50px;'),
   
   div(p("Don't have a Synapse account yet?", style='text-align: center; font-size: 8;'),
       p("Follow the ",
