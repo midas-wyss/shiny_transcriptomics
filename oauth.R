@@ -8,7 +8,6 @@ CLIENT_ID = NULL
 CLIENT_SECRET = NULL
 if (DEBUG){
   # Local testing
-  options(shiny.port = 7450)
   APP_URL = 'http://127.0.0.1:7450'
   CLIENT_ID = Sys.getenv('CLIENT_ID_LOCAL')
   CLIENT_SECRET = Sys.getenv('CLIENT_SECRET_LOCAL')
