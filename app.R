@@ -1,11 +1,9 @@
 library(shiny)
 library(httr)
 library(rjson)
-library(umap)
 library(DT)
 library(plotly)
 
-INGBER_ID <- Sys.getenv('INGBER_ID')
 DEBUG <- Sys.getenv('DEBUG') == 'TRUE'
 
 # ----------------------------------- App UI --------------------------------- #
@@ -32,6 +30,9 @@ uiFunc <- function(req) {
 
 # Import UI to be shown after user before and after auth'd
 source('app_ui.R')
+if (!dir.exists('data')){
+  dir.create('data')
+}
 
 # ----------------------------------- Server --------------------------------- #
 
@@ -40,12 +41,12 @@ server <- function(input, output, session) {
   # ------------------------ Virtualenv setup -------------------------- #
   if (Sys.info()[['sysname']] != 'Darwin'){
     # When running on shinyapps.io, create a virtualenv 
-    reticulate::virtualenv_create(envname = 'python35_env', 
+    reticulate::virtualenv_create(envname = 'python35_txn_env', 
                                   python = '/usr/bin/python3')
-    reticulate::virtualenv_install('python35_env', 
+    reticulate::virtualenv_install('python35_txn_env', 
                                    packages = c('synapseclient', 'requests'))
   }
-  reticulate::use_virtualenv('python35_env', required = T)
+  reticulate::use_virtualenv('python35_txn_env', required = T)
   reticulate::source_python('connect_to_synapse.py')
   
   # ---------------------------- OAuth --------------------------------- #
@@ -100,11 +101,13 @@ server <- function(input, output, session) {
   # Get the user's teams
   teams_response <- get_synapse_teams(user_id)
   teams = unlist(lapply(teams_response$results, function(l) paste0(l$name, ' (', l$id, ')')))
-  team_ids = unlist(lapply(teams_response$results, function(l) l$id))
+  team_ids = unlist(lapply(teams_response$results, function(l) paste0('team_', l$id)))
   teams_content_formatted = paste(teams, collapse = '\n')
   
-  # Selected team
-  team_id = teams_response$results[[2]][['id']]
+  # Select team(s) that have project(s) enabled for this app
+  enabled_teams = team_ids[team_ids %in% names(PROJECT_CONFIG)]
+  # TEMP use the first team
+  TEAM_ID = enabled_teams[1]
   
   # Get projects associated with that team - why is this empty?
   projects_response <- get_synapse_projects(access_token)
@@ -128,16 +131,14 @@ server <- function(input, output, session) {
   observeEvent(input$user_account_modal, {
     showModal(
       modalDialog(title = "Synapse Account Information",
-                  p(profile_response$firstName),
-                  p(profile_response$lastName),
+                  h4(paste0(profile_response$firstName, ' ', profile_response$lastName)),
                   p(profile_response$company),
                   easyClose = T,
                   footer = tagList(
                     modalButton("Back to Analysis"),
                     actionButton("button_view_syn_profile", "View Profile on Synapse",
-                                 onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')")),
-                    actionButton("button_logout", "Log Out",
-                                 onclick = paste0("window.open('", APP_URL, "')"))
+                                 onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')"))
+                    #actionButton("button_logout", "Log Out")
                   ))
     )
   })
@@ -163,22 +164,31 @@ server <- function(input, output, session) {
   experimentData <- reactiveValues(sample_metadata_df = NULL,
                                    sample_color_columns = NULL,
                                    sample_shape_columns = NULL,
-                                   gene_counts_df = NULL)
+                                   gene_counts_df = NULL,
+                                   umap_df = NULL,
+                                   data_loaded = F)
+  
+  # Load the sample data, gene counts, and UMAP for the project
+  project_data = PROJECT_CONFIG[[TEAM_ID]]
+  sample_metadata_csv = fetch_synapse_filepath(project_data$metadata)
+  experimentData$sample_metadata_df <- read.csv(sample_metadata_csv,
+                                                stringsAsFactors = F)
+  gene_counts_csv = fetch_synapse_filepath(project_data$counts)
+  experimentData$gene_counts_df <- read.csv(gene_counts_csv,
+                                            row.names = 1,
+                                            stringsAsFactors = F)
+  umap_csv = fetch_synapse_filepath(project_data$umap)
+  experimentData$umap_df <- read.csv(umap_csv,
+                                     row.names = 1,
+                                     stringsAsFactors = F)
+  experimentData$data_loaded = T
   
   sample_dat <- reactive({ experimentData$sample_metadata_df })
   counts_dat <- reactive({ experimentData$gene_counts_df })
+  umap_dat <- reactive({ experimentData$umap_df })
+  loaded <- reactive({ experimentData$data_loaded })
   
-  # Compute UMAP when experimental data is read
-  umap_mat <- reactive({
-    counts_df = counts_dat()
-    if (!is.null(counts_df)){
-      u = umap(t(counts_df))
-      saveRDS(u$layout, 'cache/u_layout.rds')
-      return(u$layout)
-    }
-  })
-  
-  # Extract color columns from column names
+  # Extract colorable columns from column names
   color_columns <- reactive({
     dat = sample_dat()
     if (!is.null(dat)){
@@ -190,7 +200,7 @@ server <- function(input, output, session) {
     }
   })
   
-  # Extract shape columns from column names
+  # Extract shapeable columns from column names
   shape_columns <- reactive({
     dat = sample_dat()
     if (!is.null(dat)){
@@ -202,47 +212,92 @@ server <- function(input, output, session) {
     }
   })
   
-  # If the person is a member of the Ingber Lab group,
-  # read the sample data and gene counts
-  if (INGBER_ID %in% team_ids){
-    sample_metadata_csv = fetch_synapse_filepath('syn21519470')
-    experimentData$sample_metadata_df <- read.csv(sample_metadata_csv,
-                                                  stringsAsFactors = F)
-    gene_counts_csv = fetch_synapse_filepath('syn21519469')
-    experimentData$gene_counts_df <- read.csv(gene_counts_csv,
-                                              row.names = 1,
-                                              stringsAsFactors = F)
-  }
+  observeEvent(loaded(), {
+    color_choices = color_columns()
+    shape_choices = shape_columns()
+    updateRadioButtons(session, 'umap_color_by', 
+                       choices = color_choices, selected = color_choices[1])
+    updateRadioButtons(session, 'umap_shape_by', 
+                       choices = shape_choices, selected = shape_choices[1])
+  })
   
   output$umap_plot <- renderPlotly({
     
-    # User input plot params
-    n = input$plot_n
-    color_column = input$umap_color_by
-    shape_column = input$umap_shape_by
-    
-    # Format dataframe for plotting
-    plot_mat = umap_mat()
-    sample_metadata = sample_dat()
-    row.names(sample_metadata) = sample_metadata$well_name
-    plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
-    names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
-    
-    # Make sure the color & shape columns are factors
-    plot_df[,color_column] = as.factor(plot_df[,color_column])
-    plot_df[,shape_column] = as.factor(plot_df[,shape_column])
-    
-    # Plot
-    plot_ly(data = plot_df, x = ~V1, y = ~V2,
-            color = ~get(color_column), 
-            colors = sample(PLOT_COLORS, length(unique(plot_df[,color_column]))),
-            symbol = ~get(shape_column),
-            symbols = sample(PLOT_SHAPES, length(unique(plot_df[,shape_column]))),
-            text = ~well_name,
-            hovertemplate = '<b>Sample ID:</b> %{text}',
-            type = 'scatter', mode = 'markers',
-            marker = list(size = 10))
+    if (loaded()){
+      
+      # User input plot params
+      color_column = input$umap_color_by
+      shape_column = input$umap_shape_by
+      
+      # Format dataframe for plotting
+      plot_mat = umap_dat()
+      sample_metadata = sample_dat()
+      row.names(sample_metadata) = sample_metadata$well_name
+      plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
+      names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
+      
+      # Make sure the color & shape columns are factors
+      plot_df[,color_column] = as.factor(plot_df[,color_column])
+      plot_df[,shape_column] = as.factor(plot_df[,shape_column])
+      plot_cols = sample(PLOT_COLORS, length(unique(plot_df[,color_column])))
+      plot_symbols = sample(PLOT_SHAPES, length(unique(plot_df[,shape_column])))
+      
+      # Plot
+      p <- plot_ly(data = plot_df, x = ~V1, y = ~V2,
+              color = ~get(color_column), 
+              colors = plot_cols,
+              symbol = ~get(shape_column),
+              symbols = plot_symbols,
+              text = ~well_name,
+              hovertemplate = '<b>Sample ID:</b> %{text}',
+              type = 'scatter', mode = 'markers',
+              marker = list(size = 10))
+      
+      # Save to PDF
+      pdf('data/sample_umap.pdf', height = 6, width = 8)
+      x_max = max(plot_df$V1)
+      x_min = min(plot_df$V1)
+      x_range = x_max - x_min
+      new_x_max = x_max + .5*x_range
+      pdf_colors = plot_cols
+      names(pdf_colors) = unique(plot_df[,color_column])
+      pdf_symbols = PLOT_SHAPES
+      names(pdf_symbols) = unique(plot_df[,shape_column])
+      
+      plot(plot_df$V1, plot_df$V2,
+           main = 'Sample UMAP',
+           xlab = 'UMAP dimension 1', 
+           ylab = 'UMAP dimension 2',
+           xlim = c(x_min, new_x_max),
+           pch = pdf_symbols[plot_df[,shape_column]],
+           bg = pdf_colors[plot_df[,color_column]],
+           las = 1)
+      
+      unique_colors = as.character(unique(plot_df[,color_column]))
+      unique_symbols = as.character(unique(plot_df[,shape_column]))
+      all_samples_combined = paste0(plot_df[,color_column], '__', plot_df[,shape_column])
+      unique_samples = unique(all_samples_combined)
+      
+      plot_legend = titlify(unique_samples)
+      plot_legend_colors = pdf_colors[as.character(sapply(unique_samples, function(x) strsplit(x, '-')[[1]][1]))]
+      plot_legend_symbols = pdf_symbols[as.character(sapply(unique_samples, function(x) strsplit(x, '-')[[1]][2]))]
+      legend('right', legend = plot_legend,
+             pt.bg = plot_legend_colors,
+             pch = plot_legend_symbols)
+      dev.off()
+      
+      return(p)
+      
+    } 
   })
+  
+  # Download UMAP plot as a PDF
+  output$download_umap_pdf <- downloadHandler(
+    filename = "Sample_UMAP.pdf",
+    content = function(file) {
+      file.copy("data/sample_umap.pdf", file)
+    }
+  )
   
   # Output the table of all sample metadata
   output$sample_metadata <- DT::renderDT({

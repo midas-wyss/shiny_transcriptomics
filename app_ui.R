@@ -14,20 +14,28 @@ jscode <- "Shiny.addCustomMessageHandler('customredirect', function(message) { w
 PLOT_COLORS <- brewer.pal(11, 'Spectral')
 PLOT_SHAPES <- 21:25
 
+titlify <- function(s){
+  to_title <- function(ss){
+    ss = paste0(toupper(substr(ss,1,1)), substr(ss,2,nchar(ss)))
+    ss = gsub('_', ' ', ss)
+    ss = gsub(' ic', ' IC', ss)
+    return(ss)
+  }
+  if (length(s) > 1){
+    return(sapply(s, to_title))
+  } else{
+    return(to_title(s))
+  }
+}
+
 # ------------------------------- Pre-login UI ------------------------------ #
 
 AnonymousUI <- fluidPage(
-  tags$head(
-    tags$link(rel = "stylesheet", type = "text/css", href = "bootstrap_rani.css")
-  ),
-  title = 'Shiny Synapse Auth Example App',
+  tags$head(tags$link(rel="stylesheet", type="text/css", href="bootstrap_rani.css"),
+            HTML('<link rel="icon" href="favicon.ico" type="image/x-icon"/>')),
+  title = 'Transcriptomics Explorer',
   
   h1('Transcriptomics Explorer'),
-  
-  # Logo
-  #div(img(src = paste0('www/logo.png'), width = '300px'),
-  #    style='text-align: center;'),
-  #br(),
   
   # DNA
   HTML('<div id="dna">
@@ -46,8 +54,9 @@ AnonymousUI <- fluidPage(
   
   div(p("Don't have a Synapse account yet?", style='text-align: center; font-size: 8;'),
       p("Follow the ",
-        a(href = 'https://midas-wyss.github.io/synapse_instructions_ingber.html',
-        'instructions for registering here'), '.', style='text-align: center;'))
+        a(href = 'https://midas-wyss.github.io/synapse_instructions_predictive_bioanalytics.html',
+          target = '_blank', 'instructions for registering here'), 
+        '.', style='text-align: center;'))
 )
 
 # ------------------------------ Post-login UI ------------------------------ #
@@ -99,32 +108,43 @@ AuthenticatedUI <- dashboardPage(
   ),
   
   dashboardBody(
+    tags$head(includeHTML('www/analytics.html'),
+              HTML('<link rel="icon" href="favicon.ico" type="image/x-icon"/>')),
     tabItems(
       tabItem(tabName = "samples",
               fluidRow(
                 box(title = "Between-sample variability (UMAP algorithm)", 
+                    width = 7,
                     height = 500,
                     div(withSpinner(plotlyOutput('umap_plot'),
-                                    type = 8, color = '#42B5BB'),
+                                    type = 4, color = '#42B5BB'),
                         style = "overflow-y: auto;")),
-                box(title = "Plot parameters",
+                box(title = "UMAP plot settings",
+                    width = 5,
                     height = 500,
-                    radioButtons('umap_color_by', 
-                                 label = 'Color samples by',
-                                 choices = c('condition', 'group', 'time', 'group_time'),
-                                 selected = 'group_time'),
-                    radioButtons('umap_shape_by', 
-                                 label = 'Shape samples by',
-                                 choices = c('condition', 'group', 'time', 'group_time'),
-                                 selected = 'condition')
-                )
+                    div(style = 'padding-left: 20px; float: left;',
+                        radioButtons('umap_color_by', 
+                                     label = 'Color samples by',
+                                     choices = 'Loading...',
+                                     selected = character(0))),
+                    div(style = 'padding-left: 30px; float: left;',
+                        radioButtons('umap_shape_by', 
+                                     label = 'Shape samples by',
+                                     choices = 'Loading...',
+                                     selected = character(0))
+                    ),
+                    br(),
+                    div(style = 'position: relative; padding: 20px;',
+                        hr()),
+                    downloadButton('download_umap_pdf', 'Download plot (PDF)')
+                  )
               ),
               fluidRow(
                 box(title = "All sample meta-data",
                     width = 12,
-                    div(withSpinner(dataTableOutput('sample_metadata'),
-                                    type = 8, color = '#42B5BB'),
-                        style = "overflow-y: auto; height: 600px;")
+                    div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
+                        withSpinner(dataTableOutput('sample_metadata'),
+                                    type = 4, color = '#42B5BB'))
                 )
               )
       ),
