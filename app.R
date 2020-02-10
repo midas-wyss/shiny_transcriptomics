@@ -218,7 +218,7 @@ server <- function(input, output, session) {
     updateRadioButtons(session, 'umap_color_by', 
                        choices = color_choices, selected = color_choices[1])
     updateRadioButtons(session, 'umap_shape_by', 
-                       choices = shape_choices, selected = shape_choices[1])
+                       choices = shape_choices, selected = shape_choices[2])
     updateSelectInput(session, 'select_volcano_column', 
                       choices = color_choices, selected = color_choices[1])
   })
@@ -228,15 +228,15 @@ server <- function(input, output, session) {
   
   output$umap_plot <- renderPlotly({
     
+    # User input plot params
+    color_column = selected_color_column()
+    shape_column = selected_shape_column()
+    
+    # Experimental data
     plot_mat = umap_dat()
     sample_metadata = sample_dat()
     
-    if (loaded() & !is.null(plot_mat)){
-      
-      # User input plot params
-      color_column = selected_color_column()
-      shape_column = selected_shape_column()
-      
+    if (loaded() & !is.null(color_column)){
       # Format dataframe for plotting
       row.names(sample_metadata) = sample_metadata$well_name
       plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
@@ -245,23 +245,25 @@ server <- function(input, output, session) {
       # Make sure the color & shape columns are factors
       plot_df[,color_column] = as.factor(plot_df[,color_column])
       plot_df[,shape_column] = as.factor(plot_df[,shape_column])
-      plot_cols = sample(PLOT_COLORS, length(unique(plot_df[,color_column])))
-      plot_symbols = sample(PLOT_SHAPES, length(unique(plot_df[,shape_column])))
+      n_colors = length(unique(plot_df[,color_column]))
+      n_symbols = length(unique(plot_df[,shape_column]))
+      plot_cols = c('#42B5BB', sample(PLOT_COLORS, n_colors-1))
+      plot_symbols = sample(PLOT_SHAPES, n_symbols)  
       
       # Plot
       p <- plot_ly(data = plot_df, x = ~V1, y = ~V2,
-              color = ~get(color_column), 
-              colors = plot_cols,
-              symbol = ~get(shape_column),
-              symbols = plot_symbols,
-              text = ~well_name,
-              hovertemplate = '<b>Sample ID:</b> %{text}',
-              type = 'scatter', mode = 'markers',
-              marker = list(size = 10,
-                            line = list(
-                              color = '#212D32',
-                              width = 1
-              )))
+                   color = ~get(color_column), 
+                   colors = plot_cols,
+                   symbol = ~get(shape_column),
+                   symbols = plot_symbols,
+                   text = ~well_name,
+                   hovertemplate = '<b>Sample ID:</b> %{text}',
+                   type = 'scatter', mode = 'markers',
+                   marker = list(size = 10,
+                                 line = list(
+                                   color = '#212D32',
+                                   width = 1
+                                 )))
       
       # Save to PDF
       pdf('data/sample_umap.pdf', height = 6, width = 8)
@@ -271,19 +273,17 @@ server <- function(input, output, session) {
       new_x_max = x_max + .5*x_range
       pdf_colors = plot_cols
       names(pdf_colors) = unique(plot_df[,color_column])
-      pdf_symbols = PLOT_SHAPES
+      pdf_symbols = plot_symbols
       names(pdf_symbols) = unique(plot_df[,shape_column])
       
-      plot(1:10, 1:10)
-      
-      #plot(plot_df$V1, plot_df$V2,
-      #     main = 'Sample UMAP',
-      #     xlab = 'UMAP dimension 1', 
-      #     ylab = 'UMAP dimension 2',
-      #     xlim = c(x_min, new_x_max),
-      #     pch = pdf_symbols[plot_df[,shape_column]],
-      #     bg = pdf_colors[plot_df[,color_column]],
-      #     las = 1)
+      plot(plot_df$V1, plot_df$V2,
+           main = 'Sample UMAP',
+           xlab = 'UMAP dimension 1', 
+           ylab = 'UMAP dimension 2',
+           xlim = c(x_min, new_x_max),
+           pch = pdf_symbols[plot_df[,shape_column]],
+           bg = pdf_colors[plot_df[,color_column]],
+           las = 1)
       
       unique_colors = as.character(unique(plot_df[,color_column]))
       unique_symbols = as.character(unique(plot_df[,shape_column]))
@@ -299,7 +299,6 @@ server <- function(input, output, session) {
       dev.off()
       
       return(p)
-      
     } else{
       return(NULL)
     } 
