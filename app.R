@@ -219,19 +219,25 @@ server <- function(input, output, session) {
                        choices = color_choices, selected = color_choices[1])
     updateRadioButtons(session, 'umap_shape_by', 
                        choices = shape_choices, selected = shape_choices[1])
+    updateSelectInput(session, 'select_volcano_column', 
+                      choices = color_choices, selected = color_choices[1])
   })
+  
+  selected_color_column <- reactive({ input$umap_color_by })
+  selected_shape_column <- reactive({ input$umap_shape_by })
   
   output$umap_plot <- renderPlotly({
     
-    if (loaded()){
+    plot_mat = umap_dat()
+    sample_metadata = sample_dat()
+    
+    if (loaded() & !is.null(plot_mat)){
       
       # User input plot params
-      color_column = input$umap_color_by
-      shape_column = input$umap_shape_by
+      color_column = selected_color_column()
+      shape_column = selected_shape_column()
       
       # Format dataframe for plotting
-      plot_mat = umap_dat()
-      sample_metadata = sample_dat()
       row.names(sample_metadata) = sample_metadata$well_name
       plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
       names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
@@ -251,7 +257,11 @@ server <- function(input, output, session) {
               text = ~well_name,
               hovertemplate = '<b>Sample ID:</b> %{text}',
               type = 'scatter', mode = 'markers',
-              marker = list(size = 10))
+              marker = list(size = 10,
+                            line = list(
+                              color = '#212D32',
+                              width = 1
+              )))
       
       # Save to PDF
       pdf('data/sample_umap.pdf', height = 6, width = 8)
@@ -264,14 +274,16 @@ server <- function(input, output, session) {
       pdf_symbols = PLOT_SHAPES
       names(pdf_symbols) = unique(plot_df[,shape_column])
       
-      plot(plot_df$V1, plot_df$V2,
-           main = 'Sample UMAP',
-           xlab = 'UMAP dimension 1', 
-           ylab = 'UMAP dimension 2',
-           xlim = c(x_min, new_x_max),
-           pch = pdf_symbols[plot_df[,shape_column]],
-           bg = pdf_colors[plot_df[,color_column]],
-           las = 1)
+      plot(1:10, 1:10)
+      
+      #plot(plot_df$V1, plot_df$V2,
+      #     main = 'Sample UMAP',
+      #     xlab = 'UMAP dimension 1', 
+      #     ylab = 'UMAP dimension 2',
+      #     xlim = c(x_min, new_x_max),
+      #     pch = pdf_symbols[plot_df[,shape_column]],
+      #     bg = pdf_colors[plot_df[,color_column]],
+      #     las = 1)
       
       unique_colors = as.character(unique(plot_df[,color_column]))
       unique_symbols = as.character(unique(plot_df[,shape_column]))
@@ -288,6 +300,8 @@ server <- function(input, output, session) {
       
       return(p)
       
+    } else{
+      return(NULL)
     } 
   })
   
@@ -300,13 +314,45 @@ server <- function(input, output, session) {
   )
   
   # Output the table of all sample metadata
-  output$sample_metadata <- DT::renderDT({
+  output$table_sample_metadata <- DT::renderDT({
     return(experimentData$sample_metadata_df)
   })
   
+  # Link to file on Synapse
+  output$info_samples <- renderUI({
+    actionLink('view_synapse_metadata', 'View original file on Synapse', 
+             style = 'color: #42B5BB;',
+             onclick = paste0("window.open('https://www.synapse.org/#!Synapse:", 
+                              project_data$metadata, "', '_blank')"))
+    })
+  
   # ------------------------- Tab 2: Diff Expr ------------------------- #
   
-  #contrast_groups = read.table()
+  volcano_column <- reactive({ input$select_volcano_column })
+  
+  observeEvent(volcano_column(), {
+    column = volcano_column()
+    dat = sample_dat()
+    if (loaded() & column %in% names(dat)){
+      filter_options = unique(as.character(dat[,column]))
+      updateSelectInput(session, 'select_group1_criteria', 
+                        label = paste0('Group 1 ', column, ' ='),
+                        choices = filter_options, selected = filter_options[1])
+      updateSelectInput(session, 'select_group2_criteria', 
+                        label = paste0('Group 2 ', column, ' ='),
+                        choices = filter_options, selected = filter_options[2])
+    }
+  })
+  
+  output$volcano_plot <- renderPlotly({
+    
+    return(NULL)
+  })
+  
+  output$table_differential_expression <- DT::renderDT({
+    dat = data.frame(Gene = letters, Pval = 1:26, Adj_P_val = 1:26)
+    return(dat)
+  })
   
 }
 
