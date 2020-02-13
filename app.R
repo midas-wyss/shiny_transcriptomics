@@ -181,6 +181,18 @@ server <- function(input, output, session) {
     write.table(txt, out_file, sep = '\t', row.names = F, quote = F, col.names = F)
   }
   
+  generate_volcano_methods <- function(a, numa, b, numb){
+    in_file = 'data/methods/deg.txt'
+    out_file = 'data/methods/deg_filled.txt'
+    txt = read.table(in_file, sep = '|', stringsAsFactors = F)
+    editable_txt = gsub('<A>', a, txt[1,])
+    editable_txt = gsub('<NUMA>', numa, editable_txt)
+    editable_txt = gsub('<B>', b, editable_txt)
+    editable_txt = gsub('<NUMB>', numb, editable_txt)
+    txt[1,1] = editable_txt
+    write.table(txt, out_file, sep = '\t', row.names = F, quote = F, col.names = F)
+  }
+  
   
   # -------------------------- Tab 1: Samples -------------------------- #
   
@@ -391,10 +403,10 @@ server <- function(input, output, session) {
     if (loaded() & column %in% names(dat)){
       filter_options = unique(as.character(dat[,column]))
       updateSelectInput(session, 'select_group1_criteria', 
-                        label = paste0('Group 1 ', column, ' ='),
+                        label = paste0('Group A ', column, ' ='),
                         choices = filter_options, selected = filter_options[1])
       updateSelectInput(session, 'select_group2_criteria', 
-                        label = paste0('Group 2 ', column, ' ='),
+                        label = paste0('Group B ', column, ' ='),
                         choices = filter_options, selected = filter_options[2])
     }
   })
@@ -417,14 +429,17 @@ server <- function(input, output, session) {
     }
   })
   
-  output$group1_selected <- renderText({
+  output$group1_group2_selected <- renderText({
     a = group1()
-    return(paste0(length(a), ' samples selected'))
-  })
-  
-  output$group2_selected <- renderText({
     b = group2()
-    return(paste0(length(b), ' samples selected'))
+    group1_filter = group1_criteria()
+    group2_filter = group2_criteria()
+    str = '<A> (n = <NUMA> samples) vs <B> (n = <NUMB> samples)'
+    str = gsub('<A>', group1_filter, str)
+    str = gsub('<B>', group2_filter, str)
+    str = gsub('<NUMA>', length(a), str)
+    str = gsub('<NUMB>', length(b), str)
+    return(str)
   })
   
   observeEvent(input$button_run_volcano, {
@@ -477,26 +492,44 @@ server <- function(input, output, session) {
         # Save table to prevent re-creating it in the same session
         write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
         
+        # Save methods file
+        generate_volcano_methods(group1_filter, length(a), 
+                                 group2_filter, length(b))
+        
       }
       diffExprData$diff_expr_result <- deg_tab
     }
   })
   
+  output$volcano_message <- renderUI({
+    if (is.null(diffExprData$diff_expr_result)){
+      return(p(style='padding-left: 20px; color: #D2D6DD;', 
+               'Use the section to the left to set analysis parameters and click "Run analysis" to view results'))
+    } else{
+      return(p(style='padding-left: 20px; color: #D2D6DD;',
+               'Hover over points to view gene info'))
+    }
+  })
+  
   output$volcano_plot <- renderPlotly({
+    
+    group1_filter = group1_criteria()
+    group2_filter = group2_criteria()
     
     deg_results = most_recent_result()
     p_cutoff = 0.05
-    upper_fc_cutoff = log2(1.2)
-    lower_fc_cutoff = log2(0.8)
+    upper_fc_cutoff = 1
+    lower_fc_cutoff = -1
     
     if (!is.null(deg_results)){
       
       deg_results$log10pval = -log10(deg_results$adj.P.Val)
-      deg_results$sig = ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC > upper_fc_cutoff, 'pos',
-                               ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC < upper_fc_cutoff, 'neg', 'not sig'))
+      deg_results$sig = ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC > upper_fc_cutoff, 'increased',
+                               ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC < lower_fc_cutoff, 'decreased', 
+                                      'not significant'))
       
       plot_cols = c(PLOT_COLORS[2], '#3aa4a9', '#C3C5C7')
-      names(plot_cols) = c('pos', 'neg', 'not sig')
+      names(plot_cols) = c('increased', 'decreased', 'not significant')
       
       # Plot
       p <- plot_ly(data = deg_results, x = ~logFC, y = ~log10pval,
@@ -510,9 +543,20 @@ server <- function(input, output, session) {
                                    color = '#212D32',
                                    width = 1
                                  ))) %>%
-        layout(xaxis = list(title = 'log2 fold change'),
+        layout(title = paste0(group1_filter, ' vs ', group2_filter),
+               xaxis = list(title = 'log2 fold change'),
                yaxis = list(title = '-log10 adjusted p-value')
         )
+      
+      # Save plot as PDF
+      pdf('data/diffexpr_volcano.pdf', height = 8, width = 6)
+      volcano_plot(deg_results$logFC, deg_results$adj.P.Val, 
+                   p_adj_threshold = p_cutoff, 
+                   plot_main = paste0(group1_filter, ' vs ', group2_filter))
+      legend('bottomright', bg = 'white',
+             pch = 21, pt.bg = plot_cols,
+             legend = names(plot_cols))
+      dev.off()
       
       return(p)
     } else{
@@ -528,11 +572,42 @@ server <- function(input, output, session) {
     }
   })
   
+  # Download volcano plot as a PDF
+  output$download_volcano_pdf <- downloadHandler(
+    filename = "DEG_volcano.pdf",
+    content = function(file) {
+      file.copy("data/diffexpr_volcano.pdf", file)
+    }
+  )
+  
+  # Download differential expression analysis methods as a .txt file
+  output$download_volcano_methods <- downloadHandler(
+    filename = "DEG_methods.txt",
+    content = function(file) {
+      if (!is.null(diffExprData$diff_expr_result)){
+        file.copy('data/methods/deg_filled.txt', file)
+      } else{
+        file.copy('data/methods/deg.txt', file)
+      }
+    }
+  )
+  
   output$table_differential_expression <- DT::renderDT({
     df = most_recent_result()
+    
     if (!is.null(df)){
+      
+      # Replace gene names with hyperlink
+      gene_names = df$Gene
+      gene_links = sapply(gene_names, function(s){
+        # <a href="https://www.w3schools.com" target="_blank">Visit W3Schools</a>
+        HTML(paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?gene=", s, "' target='_blank'>", s,"</a>"))
+      })
+      df$Gene = gene_links
+      
+      # Display
       return(datatable(df, rownames = F, selection = 'none',
-                       style = 'bootstrap'))
+                       style = 'bootstrap', escape = F))
     } else{
       return(NULL)
     }

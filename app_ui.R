@@ -28,6 +28,32 @@ titlify <- function(s){
   }
 }
 
+volcano_plot <- function(log2_fc, p_adj, p_adj_threshold = 0.01, 
+                         plot_main = 'Volcano', ymax = 25){
+  
+  if (length(log2_fc) != length(p_adj)){
+    return('Log2FC and pAdj vectors are different lengths!')
+  } else {
+    
+    # Red, teal, grey
+    plot_cols = c(PLOT_COLORS[2], '#3aa4a9', '#C3C5C7')
+    cols = rep(plot_cols[3], length(p_adj))
+    cols[log2_fc > 1 & p_adj < p_adj_threshold] = plot_cols[1]
+    cols[log2_fc < -1 & p_adj < p_adj_threshold] = plot_cols[2]
+    
+    plot(log2_fc, -log10(p_adj),
+         main = plot_main,
+         xlab = 'log2 fold change', ylab = '-log10 FDR-adjusted p-value',
+         ylim = c(0, ymax),
+         las = 1, pch = 21,
+         bg = cols)
+    abline(h = -log10(p_adj_threshold),
+           col = plot_cols[3])
+    abline(v = 1, col = plot_cols[1])
+    abline(v = -1, col = plot_cols[2])
+  }
+}
+
 # ------------------------------- Pre-login UI ------------------------------ #
 
 AnonymousUI <- fluidPage(
@@ -169,37 +195,50 @@ AuthenticatedUI <- dashboardPage(
                 box(title = "Set parameters for analysis", 
                     width = 6,
                     height = 500,
-                    div(style = 'padding-left: 20px; width: 40px;',
-                        selectInput('select_volcano_column', 'Split groups by',
-                                        'Loading...', selected = character(0)),
-                        div(style = '',
-                            textInput('text_group1', 'Group A Name', 'Group A'),
+                    div(style='padding-left: 20px;',
+                        div(style='width: 180px;',
+                            selectInput('select_volcano_column', 'Split groups by',
+                                        'Loading...', selected = character(0))),
+                        div(style='float: left; width: 180px;',
+                            #textInput('text_group1', 'Group A Name', 'Group A'),
                             selectInput('select_group1_criteria', 'Group A criteria',
-                                        'Loading...', selected = character(0)),
-                            verbatimTextOutput('group1_selected', F)
-                            
+                                        'Loading...', selected = character(0))
                         ),
-                        div(style = '',
-                            textInput('text_group2', 'Group B Name', 'Group B'),
+                        div(style='float: left; width: 240px; padding-left: 50px;',
+                            #textInput('text_group2', 'Group B Name', 'Group B'),
                             selectInput('select_group2_criteria', 'Group B criteria',
-                                        'Loading...', selected = character(0)),
-                            verbatimTextOutput('group2_selected', F)
+                                        'Loading...', selected = character(0))
                         ),
-                        div(style = 'padding-top: 10px; padding-bottom: 20px;',
-                            helpText('Comparison is Group A vs Group B, so we recommend setting Group B as the control'),
-                            actionButton('button_run_volcano', 'Run differential expression analysis',
-                                         icon = icon("angle-double-right"),
+                    ),
+                    div(style = 'padding-left: 20px; width: 440px;',
+                        verbatimTextOutput('group1_group2_selected', F),
+                        div(style = 'color: #D2D6DD;',
+                          helpText('The comparison is performed as "Group A vs Group B," so we recommend setting Group B as your control.')
+                        )
+                    ),
+                    div(style = 'padding-top: 40px; padding-left: 20px; clear: left;',
+                        actionButton('button_run_volcano', 'Run analysis',
+                                     icon = icon("angle-double-right"),
+                                     style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+      border-radius: 5px;')
+                    ),
+                    div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
+                        div(style = 'float: left; padding-right: 20px;',
+                          downloadButton('download_volcano_pdf', 'Download plot (.pdf)',
+                            style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+        border-radius: 5px;')
+                        ),
+                        div(style = 'float: left;',
+                          downloadButton('download_volcano_methods', 'Download legend & methods (.txt)',
                                          style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
-    border-radius: 5px;')
-                        ),
-                        div(downloadButton('download_volcano_pdf', 'Download plot (PDF)',
-                                       style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
-    border-radius: 5px;'))
+        border-radius: 5px;')
+                        )
                     )
                 ),
-                box(title = "Volcano plot",
+                box(title = "Volcano plot of differentially expressed genes",
                     width = 6,
                     height = 500,
+                    uiOutput('volcano_message'),
                     div(withSpinner(plotlyOutput('volcano_plot'),
                                     type = 4, color = '#42B5BB'))
                 )
