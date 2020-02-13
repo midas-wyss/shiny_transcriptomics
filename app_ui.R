@@ -32,7 +32,7 @@ titlify <- function(s){
 
 AnonymousUI <- fluidPage(
   tags$head(tags$link(rel="stylesheet", type="text/css", href="bootstrap_rani.css"),
-            HTML('<link rel="icon" href="favicon.ico" type="image/x-icon"/>')),
+            HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
   title = 'Transcriptomics Explorer',
   
   h1('Transcriptomics Explorer'),
@@ -46,6 +46,10 @@ AnonymousUI <- fluidPage(
     <div></div><div></div><div></div><div></div><div></div>
     <div></div><div></div><div></div><div></div><div></div>
     </div>'),
+  
+  # Logo
+  #div(img(src = paste0('www/logo.png'), width = '300px'),
+  #    style='text-align: center;')
   
   # Login button
   tags$head(tags$script(jscode)),
@@ -85,23 +89,21 @@ AuthenticatedUI <- dashboardPage(
                               .skin-blue .sidebar-menu > li.active > a,
                               .skin-blue .sidebar-menu > li:hover > a { border-left-color: #3aa4a9;}'
     ))),
-    selectInput('project_select', 
-                label = 'Project',
-                selected = 'Influenza biomarkers',
-                choices = c('Influenza biomarkers')),
+    selectInput('project_select', 'Project',
+                list('NIH Influenza'= c('Healthy vs COPD'))),
     div(actionLink('info_modal', 'What are Projects?', 
                    style = 'color: #42B5BB;'), 
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
-      menuItem("Samples", tabName = "tab_samples", icon = icon("vial")),
+      menuItem("Samples overview", tabName = "tab_samples", icon = icon("vial")),
       menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar")),
       menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
-      menuItem("Biomarkers", tabName = "tab_biomarkers", icon = icon("share-alt")),
+      menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
       menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
     ),
     br(),
-    div(p('This tool is maintained by the Predictive BioAnalytics group - Wyss Institute at Harvard',
-          style = 'margin: 60px 5px 6px 15px;'),
+    div(p('This tool is maintained by the Predictive BioAnalytics group at the Wyss Institute at Harvard University',
+          style = 'margin: 175px 5px 6px 15px;'),
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     div(a('Contact us!', href = 'https://midas-wyss.github.io/', 
           style = 'color: #42B5BB; margin: 6px 5px 6px 15px;'),
@@ -111,9 +113,10 @@ AuthenticatedUI <- dashboardPage(
   dashboardBody(
     tags$head(includeHTML('www/analytics.html'),
               tags$style(".shiny-output-error{color: white;}"),
-              HTML('<link rel="icon" href="favicon.ico" type="image/x-icon"/>')),
+              HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
     tabItems(
       tabItem(tabName = "tab_samples",
+              h2('Samples overview'),
               fluidRow(
                 box(title = "Between-sample variability (UMAP algorithm)", 
                     width = 7,
@@ -127,18 +130,23 @@ AuthenticatedUI <- dashboardPage(
                     height = 500,
                     div(style = 'padding: 0 30px 20px 30px; float: left;',
                         radioButtons('umap_color_by', 
-                                     label = 'Color samples by',
-                                     choices = 'Loading...',
-                                     selected = character(0))),
-                    div(style = 'padding-bottom: 20px;',
-                        radioButtons('umap_shape_by', 
-                                     label = 'Shape samples by',
-                                     choices = 'Loading...',
-                                     selected = character(0))
+                                       label = 'Color samples by',
+                                       choices = 'Loading...',
+                                       selected = character(0))),
+                    div(style = 'float: left;',
+                          radioButtons('umap_shape_by', 
+                                       label = 'Shape samples by',
+                                       choices = 'Loading...',
+                                       selected = character(0))
                     ),
-                    div(style = 'padding-top: 80px; padding-left: 20px;',
-                        downloadButton('download_umap_pdf', 'Download plot (PDF)',
+                    div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
+                        downloadButton('download_umap_pdf', 'Download plot (.pdf)',
                                    style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+    border-radius: 5px;')
+                    ),
+                    div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
+                        downloadButton('download_umap_methods', 'Download figure legend (.txt)',
+                                       style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
     border-radius: 5px;')
                     )
                   )
@@ -156,37 +164,41 @@ AuthenticatedUI <- dashboardPage(
       ),
       
       tabItem(tabName = "tab_diff_expr",
+              h2('Differential Expression'),
               fluidRow(
-                box(title = "Differential expression analysis parameters", 
-                    width = 5,
+                box(title = "Set parameters for analysis", 
+                    width = 6,
                     height = 500,
-                    div(style = 'padding-left: 20px;',
+                    div(style = 'padding-left: 20px; width: 40px;',
                         selectInput('select_volcano_column', 'Split groups by',
                                         'Loading...', selected = character(0)),
-                        div(style = 'float: left;',
+                        div(style = '',
                             textInput('text_group1', 'Group A Name', 'Group A'),
                             selectInput('select_group1_criteria', 'Group A criteria',
-                                        'Loading...', selected = character(0))
+                                        'Loading...', selected = character(0)),
+                            verbatimTextOutput('group1_selected', F)
                             
                         ),
-                        div(style = 'float: left; padding-left: 20px;',
-                            textInput('text_group2', 
-                                      label = 'Group B Name', 'Group B'),
+                        div(style = '',
+                            textInput('text_group2', 'Group B Name', 'Group B'),
                             selectInput('select_group2_criteria', 'Group B criteria',
-                                        'Loading...', selected = character(0))
+                                        'Loading...', selected = character(0)),
+                            verbatimTextOutput('group2_selected', F)
                         ),
-                        div(style = 'padding-bottom: 20px;',
-                            actionButton('button_run_volcano', 'Run analysis',
+                        div(style = 'padding-top: 10px; padding-bottom: 20px;',
+                            helpText('Comparison is Group A vs Group B, so we recommend setting Group B as the control'),
+                            actionButton('button_run_volcano', 'Run differential expression analysis',
                                          icon = icon("angle-double-right"),
                                          style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
-    border-radius: 5px;')),
+    border-radius: 5px;')
+                        ),
                         div(downloadButton('download_volcano_pdf', 'Download plot (PDF)',
                                        style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
     border-radius: 5px;'))
                     )
                 ),
                 box(title = "Volcano plot",
-                    width = 7,
+                    width = 6,
                     height = 500,
                     div(withSpinner(plotlyOutput('volcano_plot'),
                                     type = 4, color = '#42B5BB'))
@@ -195,6 +207,8 @@ AuthenticatedUI <- dashboardPage(
               fluidRow(
                 box(title = "Differentially expressed genes",
                     width = 12,
+                    div(style = 'padding-left: 20px; padding-bottom: 20px; color: #D2D6DD;',
+                        textOutput('message_differential_expression')),
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_differential_expression'),
                                     type = 4, color = '#42B5BB'))
@@ -203,15 +217,18 @@ AuthenticatedUI <- dashboardPage(
       ),
       
       tabItem(tabName = "tab_pathway_enrichment",
-              h2("Plots tab content")
+              h2("Pathway enrichment"),
+              h5('In progress')
       ),
       
       tabItem(tabName = "tab_biomarkers",
-              h2("Coming soon!")
+              h2("Biomarker Identification"),
+              h5('In progress')
       ),
       
       tabItem(tabName = "tab_druid",
-              h2("Coming soon!")
+              h2("DRUID"),
+              h5('In progress')
       )
     )
   )

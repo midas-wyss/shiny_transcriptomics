@@ -3,6 +3,8 @@ library(httr)
 library(rjson)
 library(DT)
 library(plotly)
+options(repos = BiocManager::repositories())
+library(limma)
 
 DEBUG <- Sys.getenv('DEBUG') == 'TRUE'
 
@@ -79,7 +81,7 @@ server <- function(input, output, session) {
   )
   
   stop_for_status(token_request, task = 'Get an access token')
-  token_response <- content(token_request, type = NULL)
+  token_response <- httr::content(token_request, type = NULL)
   
   access_token <- token_response$access_token
   id_token <- token_response$id_token
@@ -133,13 +135,16 @@ server <- function(input, output, session) {
       modalDialog(title = "Synapse Account Information",
                   h4(paste0(profile_response$firstName, ' ', profile_response$lastName)),
                   p(profile_response$company),
+                  p(user_response$email, style = 'color: #38a1a6;'),
                   easyClose = T,
                   footer = tagList(
-                    modalButton("Back to Analysis"),
                     actionButton("button_view_syn_profile", "View Profile on Synapse",
-                                 onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')"))
+                                 style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;',
+                                 onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')")),
+                    modalButton("Back to Analysis")
                     #actionButton("button_logout", "Log Out")
-                  ))
+                  )
+      )
     )
   })
   
@@ -147,7 +152,11 @@ server <- function(input, output, session) {
   observeEvent(input$info_modal, {
     showModal(modalDialog(
       title = 'Selecting a Synapse Project',
-      "The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some projects may not be enabled for this app. Contact Rani Powers / the Predictive BioAnalytics group (midas@wyss.harvard.edu) if you have any questions.",
+      p("The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some projects may not be enabled for this app."),
+      p("Contact the Predictive BioAnalytics group (", 
+        a('midas@wyss.harvard.edu', href='mailto:midas@wyss.harvard.edu',
+          style = 'color: #42B5BB;'), 
+        ") if you have any questions!"),
       easyClose = T,
       footer = NULL
     ))
@@ -159,6 +168,20 @@ server <- function(input, output, session) {
     }
   })
   
+  # ---------------------- Methods writing functions ------------------- #
+  
+  generate_umap_methods <- function(n_genes, color_by, shape_by){
+    in_file = 'data/methods/umap.txt'
+    out_file = 'data/methods/umap_filled.txt'
+    txt = read.table(in_file, sep = '|', stringsAsFactors = F)
+    editable_txt = gsub('<GENE>', n_genes, txt[1,])
+    editable_txt = gsub('<COLOR>', color_by, editable_txt)
+    editable_txt = gsub('<SHAPE>', shape_by, editable_txt)
+    txt[1,1] = editable_txt
+    write.table(txt, out_file, sep = '\t', row.names = F, quote = F, col.names = F)
+  }
+  
+  
   # -------------------------- Tab 1: Samples -------------------------- #
   
   experimentData <- reactiveValues(sample_metadata_df = NULL,
@@ -168,16 +191,20 @@ server <- function(input, output, session) {
                                    umap_df = NULL,
                                    data_loaded = F)
   
-  # Load the sample data, gene counts, and UMAP for the project
+  # Load the projects the user has access to
   project_data = PROJECT_CONFIG[[TEAM_ID]]
-  sample_metadata_csv = fetch_synapse_filepath(project_data$metadata)
+  analyses = project_data$analyses
+  ANALYSIS = analyses[[1]]
+  
+  # Load the sample data, gene counts, and UMAP for the analysis 
+  sample_metadata_csv = fetch_synapse_filepath(ANALYSIS$metadata)
   experimentData$sample_metadata_df <- read.csv(sample_metadata_csv,
                                                 stringsAsFactors = F)
-  gene_counts_csv = fetch_synapse_filepath(project_data$counts)
+  gene_counts_csv = fetch_synapse_filepath(ANALYSIS$counts)
   experimentData$gene_counts_df <- read.csv(gene_counts_csv,
                                             row.names = 1,
                                             stringsAsFactors = F)
-  umap_csv = fetch_synapse_filepath(project_data$umap)
+  umap_csv = fetch_synapse_filepath(ANALYSIS$umap)
   experimentData$umap_df <- read.csv(umap_csv,
                                      row.names = 1,
                                      stringsAsFactors = F)
@@ -265,6 +292,9 @@ server <- function(input, output, session) {
                                    width = 1
                                  )))
       
+      # Save methods section
+      generate_umap_methods(nrow(counts_dat()), color_column, shape_column)
+      
       # Save to PDF
       pdf('data/sample_umap.pdf', height = 6, width = 8)
       x_max = max(plot_df$V1)
@@ -291,14 +321,16 @@ server <- function(input, output, session) {
       unique_samples = unique(all_samples_combined)
       
       plot_legend = titlify(unique_samples)
-      plot_legend_colors = pdf_colors[as.character(sapply(unique_samples, function(x) strsplit(x, '-')[[1]][1]))]
-      plot_legend_symbols = pdf_symbols[as.character(sapply(unique_samples, function(x) strsplit(x, '-')[[1]][2]))]
+      plot_legend_colors = pdf_colors[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][1]))]
+      plot_legend_symbols = pdf_symbols[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][2]))]
       legend('right', legend = plot_legend,
              pt.bg = plot_legend_colors,
              pch = plot_legend_symbols)
       dev.off()
       
+      # Display Plotly plot in UI
       return(p)
+      
     } else{
       return(NULL)
     } 
@@ -312,9 +344,23 @@ server <- function(input, output, session) {
     }
   )
   
+  # Download UMAP methods as a .txt file
+  output$download_umap_methods <- downloadHandler(
+    filename = "UMAP_methods.txt",
+    content = function(file) {
+      file.copy('data/methods/umap_filled.txt', file)
+    }
+  )
+  
   # Output the table of all sample metadata
   output$table_sample_metadata <- DT::renderDT({
-    return(experimentData$sample_metadata_df)
+    df = sample_dat()
+    if (!is.null(df)){
+      return(datatable(df, rownames = F, selection = 'none',
+                       style = 'bootstrap'))
+    } else{
+      return(NULL)
+    }
   })
   
   # Link to file on Synapse
@@ -322,12 +368,22 @@ server <- function(input, output, session) {
     actionLink('view_synapse_metadata', 'View original file on Synapse', 
              style = 'color: #42B5BB;',
              onclick = paste0("window.open('https://www.synapse.org/#!Synapse:", 
-                              project_data$metadata, "', '_blank')"))
+                              ANALYSIS$metadata, "', '_blank')"))
     })
   
   # ------------------------- Tab 2: Diff Expr ------------------------- #
   
+  diffExprData <- reactiveValues(group1_samples = NULL,
+                                 group2_samples = NULL,
+                                 diff_expr_result = NULL)
+  
   volcano_column <- reactive({ input$select_volcano_column })
+  group1_criteria <- reactive({ input$select_group1_criteria })
+  group2_criteria <- reactive({ input$select_group2_criteria })
+  group1 <- reactive({ diffExprData$group1_samples })
+  group2 <- reactive({ diffExprData$group2_samples })
+  
+  most_recent_result <- reactive({ diffExprData$diff_expr_result })
   
   observeEvent(volcano_column(), {
     column = volcano_column()
@@ -343,14 +399,143 @@ server <- function(input, output, session) {
     }
   })
   
+  observeEvent(group1_criteria(), {
+    column = volcano_column()
+    dat = sample_dat()
+    group1_filter = group1_criteria()
+    if (loaded() & column %in% names(dat)){
+      diffExprData$group1_samples <- dat[dat[,column] == group1_filter, 'well_name']
+    }
+  })
+  
+  observeEvent(group2_criteria(), {
+    column = volcano_column()
+    dat = sample_dat()
+    group2_filter = group2_criteria()
+    if (loaded() & column %in% names(dat)){
+      diffExprData$group2_samples <- dat[dat[,column] == group2_filter, 'well_name']
+    }
+  })
+  
+  output$group1_selected <- renderText({
+    a = group1()
+    return(paste0(length(a), ' samples selected'))
+  })
+  
+  output$group2_selected <- renderText({
+    b = group2()
+    return(paste0(length(b), ' samples selected'))
+  })
+  
+  observeEvent(input$button_run_volcano, {
+    a = group1()
+    b = group2()
+    group1_filter = group1_criteria()
+    group2_filter = group2_criteria()
+    column = volcano_column()
+    count_data = counts_dat()
+    sample_data = sample_dat()
+    
+    # Format for DESeq
+    count_data$entrez_id = NULL
+    row.names(sample_data) = sample_data$well_name
+    sample_data$well_name = NULL
+    
+    if (!is.null(count_data) & !is.null(sample_data)
+        & !is.null(a) & !is.null(b) & !is.null(column)
+        & !is.null(group1_filter) & !is.null(group2_filter)){
+      
+      out_filename = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.csv')
+      out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
+      
+      if (file.exists(out_filename)){
+        deg_tab = read.csv(out_filename, stringsAsFactors = F)
+        
+      } else{
+        
+        # Voom it up
+        count_data_tmp = count_data[,c(a, b)]
+        sample_data_tmp = sample_data[c(a, b),]
+        model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
+        colnames(model_matrix) = c(group1_filter, group2_filter)
+        count_data_voomed = voom(count_data_tmp, model_matrix)
+        
+        # Contrasts
+        contrasts_cmd = paste0('makeContrasts(', group1_filter, 
+                               '-', group2_filter, ', levels = model_matrix)')
+        contrasts = eval(parse(text=contrasts_cmd))
+        
+        # Differential expression
+        fit = lmFit(count_data_voomed, model_matrix)
+        fit2 = contrasts.fit(fit, contrasts = contrasts)
+        fit2 = eBayes(fit2)
+        deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
+        deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
+        deg_tab$Gene = as.character(deg_tab$Gene)
+        deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+        
+        # Save table to prevent re-creating it in the same session
+        write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
+        
+      }
+      diffExprData$diff_expr_result <- deg_tab
+    }
+  })
+  
   output$volcano_plot <- renderPlotly({
     
-    return(NULL)
+    deg_results = most_recent_result()
+    p_cutoff = 0.05
+    upper_fc_cutoff = log2(1.2)
+    lower_fc_cutoff = log2(0.8)
+    
+    if (!is.null(deg_results)){
+      
+      deg_results$log10pval = -log10(deg_results$adj.P.Val)
+      deg_results$sig = ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC > upper_fc_cutoff, 'pos',
+                               ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC < upper_fc_cutoff, 'neg', 'not sig'))
+      
+      plot_cols = c(PLOT_COLORS[2], '#3aa4a9', '#C3C5C7')
+      names(plot_cols) = c('pos', 'neg', 'not sig')
+      
+      # Plot
+      p <- plot_ly(data = deg_results, x = ~logFC, y = ~log10pval,
+                   color = ~sig, 
+                   colors = plot_cols,
+                   text = ~Gene,
+                   hovertemplate = '<b>Gene:</b> %{text}',
+                   type = 'scatter', mode = 'markers',
+                   marker = list(size = 10,
+                                 line = list(
+                                   color = '#212D32',
+                                   width = 1
+                                 ))) %>%
+        layout(xaxis = list(title = 'log2 fold change'),
+               yaxis = list(title = '-log10 adjusted p-value')
+        )
+      
+      return(p)
+    } else{
+      return(NULL)
+    }
+  })
+  
+  output$message_differential_expression <- renderText({
+    if (is.null(diffExprData$diff_expr_result)){
+      return("Choose the groups of samples you'd like to compare above, then click 'Run Analysis' to view volcano plot and differentially expressed genes table")
+    } else{
+      return(NULL)
+    }
   })
   
   output$table_differential_expression <- DT::renderDT({
-    dat = data.frame(Gene = letters, Pval = 1:26, Adj_P_val = 1:26)
-    return(dat)
+    df = most_recent_result()
+    if (!is.null(df)){
+      return(datatable(df, rownames = F, selection = 'none',
+                       style = 'bootstrap'))
+    } else{
+      return(NULL)
+    }
   })
   
 }

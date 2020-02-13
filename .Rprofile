@@ -18,8 +18,13 @@ if (!Sys.info()[['sysname']] == 'Darwin'){
 PROJECT_CONFIG <- list(
   # Ingber lab
   team_3402263 = list(
-    metadata = 'syn21519470',
-    counts = 'syn21519468',
-    umap = 'syn21584812'
+    project_name = 'NIH Influenza',
+    analyses = list(
+      'Healthy vs COPD' = list(
+        metadata = 'syn21519470',
+        counts = 'syn21519468',
+        umap = 'syn21584812'
+      )
+    )
   )
 )
