@@ -26,7 +26,7 @@ volcano_plot <- function(log2_fc, p_adj, p_adj_threshold = 0.01,
   } else {
     
     # Red, teal, grey
-    plot_cols = c(PLOT_COLORS[2], '#3aa4a9', '#C3C5C7')
+    plot_cols = c(PLOT_COLORS[2], '#27adde', '#C3C5C7')
     cols = rep(plot_cols[3], length(p_adj))
     cols[log2_fc > 1 & p_adj < p_adj_threshold] = plot_cols[1]
     cols[log2_fc < -1 & p_adj < p_adj_threshold] = plot_cols[2]

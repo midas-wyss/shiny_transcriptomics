@@ -18,32 +18,46 @@ AnonymousUI <- fluidPage(
             HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
   title = 'Transcriptomics Explorer',
   
+  # Wyss logo
+  #div(img(src = paste0('www/wyss-logo-full-white-small.png'), width = '300px'),
+  #    style='text-align: center; padding-top: 30px;'),
+  div(img(src = paste0('www/wyss-logo-white.png'), width = '200px'),
+      style='text-align: center; padding-top: 30px;'),
+  
   h1('Transcriptomics Explorer'),
   
   # DNA
-  HTML('<div id="dna">
-    <div></div><div></div><div></div><div></div><div></div>
-    <div></div><div></div><div></div><div></div><div></div>
-    <div></div><div></div><div></div><div></div><div></div>
-    <div></div><div></div><div></div><div></div><div></div>
-    <div></div><div></div><div></div><div></div><div></div>
-    <div></div><div></div><div></div><div></div><div></div>
-    </div>'),
-  
-  # Logo
-  #div(img(src = paste0('www/logo.png'), width = '300px'),
-  #    style='text-align: center;')
+  div(style='position: relative; height: 300px; margin-top: -80px;',
+    HTML('<div class="dna" style="--strands: 16;">
+      <div class="strand" style="--s: 0;"></div>
+      <div class="strand" style="--s: 1;"></div>
+      <div class="strand" style="--s: 2;"></div>
+      <div class="strand" style="--s: 3;"></div>
+      <div class="strand" style="--s: 4;"></div>
+      <div class="strand" style="--s: 5;"></div>
+      <div class="strand" style="--s: 6;"></div>
+      <div class="strand" style="--s: 7;"></div>
+      <div class="strand" style="--s: 8;"></div>
+      <div class="strand" style="--s: 9;"></div>
+      <div class="strand" style="--s: 10;"></div>
+      <div class="strand" style="--s: 11;"></div>
+      <div class="strand" style="--s: 12;"></div>
+      <div class="strand" style="--s: 13;"></div>
+      <div class="strand" style="--s: 14;"></div>
+      <div class="strand" style="--s: 15;"></div>
+      </div>')
+  ),
   
   # Login button
   tags$head(tags$script(jscode)),
   div(actionButton("action", "Log in with Synapse"),
-      style='text-align: center; padding-bottom: 50px;'),
+      style='text-align: center; padding-bottom: 100px;'),
   
-  div(p("Don't have a Synapse account yet?", style='text-align: center; font-size: 8;'),
+  div(p("Don't have a Synapse account yet?", style='text-align: center; font-size: 10pt;'),
       p("Follow the ",
         a(href = 'https://midas-wyss.github.io/synapse_instructions_predictive_bioanalytics.html',
-          target = '_blank', 'instructions for registering here'), 
-        '.', style='text-align: center;'))
+          target = '_blank', 'instructions for registering here', style='font-size: 10pt;'), 
+        '.', style='text-align: center; font-size: 10pt;'))
 )
 
 # ------------------------------ Post-login UI ------------------------------ #
@@ -51,31 +65,32 @@ AnonymousUI <- fluidPage(
 AuthenticatedUI <- dashboardPage(
   skin = 'blue',
   
-  dashboardHeader(title = "Transcriptomics Explorer",
+  dashboardHeader(title = 'Transcriptomics Explorer',
                   titleWidth = 250,
                   tags$li(class = "dropdown",
                           tags$li(class = "dropdown", 
                                   actionLink("user_account_modal", textOutput("logged_user")),
-                                  style = "color: #fff;"))),
+                                  style = "color: #fff;"))
+  ),
   
   dashboardSidebar(
     width = 250,
     tags$head(tags$style(HTML('.logo {
-                              background-color: #3aa4a9 !important;
+                              background-color: #1ea0cf !important;
                               }
                               .navbar {
-                              background-color: #42B5BB !important;
+                              background-color: #27adde !important;
                               }
                               .sidebar-toggle {
-                              background-color: #42B5BB !important;
+                              background-color: #27adde !important;
                               }
                               .skin-blue .sidebar-menu > li.active > a,
-                              .skin-blue .sidebar-menu > li:hover > a { border-left-color: #3aa4a9;}'
+                              .skin-blue .sidebar-menu > li:hover > a { border-left-color: #1ea0cf;}'
     ))),
     selectInput('project_select', 'Project',
                 list('NIH Influenza'= c('Healthy vs COPD'))),
     div(actionLink('info_modal', 'What are Projects?', 
-                   style = 'color: #42B5BB;'), 
+                   style = 'color: #27adde;'), 
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
       menuItem("Samples overview", tabName = "tab_samples", icon = icon("vial")),
@@ -85,12 +100,13 @@ AuthenticatedUI <- dashboardPage(
       menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
     ),
     br(),
-    div(p('This tool is maintained by the Predictive BioAnalytics group at the Wyss Institute at Harvard University',
-          style = 'margin: 175px 5px 6px 15px;'),
-        style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
-    div(a('Contact us!', href = 'https://midas-wyss.github.io/', 
-          style = 'color: #42B5BB; margin: 6px 5px 6px 15px;'),
-        style = 'font-size: 8pt; margin: 0px 5px 20px 0px;')
+    div(img(src = paste0('www/wyss-logo-white-square.png'), width = '150px'),
+        style = 'margin: 116px 18px 20px 9px'),
+    div(style = 'font-size: 8pt; margin: 0px 20px 0 20px',
+        p('Developed by the Predictive BioAnalytics group'),
+        a('Contact us!', href = 'https://midas-wyss.github.io/', 
+          style = 'color: #27adde;')
+    )
   ),
   
   dashboardBody(
@@ -106,7 +122,7 @@ AuthenticatedUI <- dashboardPage(
                     height = 500,
                     p(style='padding-left: 20px; color: #D2D6DD;', 'Hover over points to view sample info'),
                     div(withSpinner(plotlyOutput('umap_plot'),
-                                    type = 4, color = '#42B5BB'),
+                                    type = 4, color = '#27adde'),
                         style = "overflow-y: auto;")),
                 box(title = "UMAP plot settings",
                     width = 5,
@@ -124,12 +140,12 @@ AuthenticatedUI <- dashboardPage(
                     ),
                     div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
                         downloadButton('download_umap_pdf', 'Download plot (.pdf)',
-                                   style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+                                   style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
     border-radius: 5px;')
                     ),
                     div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
                         downloadButton('download_umap_methods', 'Download figure legend (.txt)',
-                                       style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+                                       style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
     border-radius: 5px;')
                     )
                   )
@@ -141,7 +157,7 @@ AuthenticatedUI <- dashboardPage(
                     width = 12,
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_sample_metadata'),
-                                    type = 4, color = '#42B5BB'))
+                                    type = 4, color = '#27adde'))
                 )
               )
       ),
@@ -176,18 +192,18 @@ AuthenticatedUI <- dashboardPage(
                     div(style = 'padding-top: 40px; padding-left: 20px; clear: left;',
                         actionButton('button_run_volcano', 'Run analysis',
                                      icon = icon("angle-double-right"),
-                                     style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+                                     style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
       border-radius: 5px;')
                     ),
                     div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
                         div(style = 'float: left; padding-right: 20px;',
                           downloadButton('download_volcano_pdf', 'Download plot (.pdf)',
-                            style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+                            style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
         border-radius: 5px;')
                         ),
                         div(style = 'float: left;',
                           downloadButton('download_volcano_methods', 'Download legend & methods (.txt)',
-                                         style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;
+                                         style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
         border-radius: 5px;')
                         )
                     )
@@ -197,7 +213,7 @@ AuthenticatedUI <- dashboardPage(
                     height = 500,
                     uiOutput('volcano_message'),
                     div(withSpinner(plotlyOutput('volcano_plot'),
-                                    type = 4, color = '#42B5BB'))
+                                    type = 4, color = '#27adde'))
                 )
               ),
               fluidRow(
@@ -207,7 +223,7 @@ AuthenticatedUI <- dashboardPage(
                         textOutput('message_differential_expression')),
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_differential_expression'),
-                                    type = 4, color = '#42B5BB'))
+                                    type = 4, color = '#27adde'))
                 )
               )
       ),

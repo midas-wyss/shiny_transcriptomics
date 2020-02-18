@@ -135,11 +135,11 @@ server <- function(input, output, session) {
       modalDialog(title = "Synapse Account Information",
                   h4(paste0(profile_response$firstName, ' ', profile_response$lastName)),
                   p(profile_response$company),
-                  p(user_response$email, style = 'color: #38a1a6;'),
+                  p(user_response$email, style = 'color: #27adde;'),
                   easyClose = T,
                   footer = tagList(
                     actionButton("button_view_syn_profile", "View Profile on Synapse",
-                                 style = 'color: #ffffff; background-color: #42B5BB; border-color: #38a1a6;',
+                                 style = 'color: #ffffff; background-color:  #27adde; border-color: #1ea0cf;',
                                  onclick = paste0("window.open('https://www.synapse.org/#!Profile:", profile_response$ownerId, "', '_blank')")),
                     modalButton("Back to Analysis")
                     #actionButton("button_logout", "Log Out")
@@ -155,7 +155,7 @@ server <- function(input, output, session) {
       p("The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some projects may not be enabled for this app."),
       p("Contact the Predictive BioAnalytics group (", 
         a('midas@wyss.harvard.edu', href='mailto:midas@wyss.harvard.edu',
-          style = 'color: #42B5BB;'), 
+          style = 'color: #27adde;'), 
         ") if you have any questions!"),
       easyClose = T,
       footer = NULL
@@ -286,7 +286,7 @@ server <- function(input, output, session) {
       plot_df[,shape_column] = as.factor(plot_df[,shape_column])
       n_colors = length(unique(plot_df[,color_column]))
       n_symbols = length(unique(plot_df[,shape_column]))
-      plot_cols = c('#42B5BB', sample(PLOT_COLORS, n_colors-1))
+      plot_cols = c('#27adde', sample(PLOT_COLORS, n_colors-1))
       plot_symbols = sample(PLOT_SHAPES, n_symbols)  
       
       # Plot
@@ -378,7 +378,7 @@ server <- function(input, output, session) {
   # Link to file on Synapse
   output$info_samples <- renderUI({
     actionLink('view_synapse_metadata', 'View original file on Synapse', 
-             style = 'color: #42B5BB;',
+             style = 'color: #27adde;',
              onclick = paste0("window.open('https://www.synapse.org/#!Synapse:", 
                               ANALYSIS$metadata, "', '_blank')"))
     })
