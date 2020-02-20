@@ -5,7 +5,7 @@ This Shiny app allows users to log in with their [Synapse](https://www.synapse.o
 <br>
 
 <p align="center">
-<img src="https://cdn.brandfolder.io/TLCWDQBL/as/q5x94t-crv8fc-ed7nyn/txn_explorer.gif" width="300">
+<img src="https://cdn.brandfolder.io/TLCWDQBL/as/q5z66l-fkkca8-f12rpj/transcriptomics_demo.gif" width="800">
 </p>
 
 <br>
