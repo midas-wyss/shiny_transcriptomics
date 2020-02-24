@@ -224,7 +224,7 @@ AuthenticatedUI <- dashboardPage(
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_differential_expression'),
                                     type = 4, color = '#27adde')),
-                    div(style = 'padding-left: 20px; padding-bottom: 40px;',
+                    div(style = 'padding: 20px;',
                         downloadButton('download_diff_expr_table', 'Download full table (.csv)',
                                        style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
         border-radius: 5px;')
@@ -232,7 +232,9 @@ AuthenticatedUI <- dashboardPage(
                 ),
                 box(title = "Box and whisker plot",
                     width = 6,
-                    p('Placeholder')
+                    p('Coming soon')
+                    #div(withSpinner(plotlyOutput('gene_box_plot'),
+                    #                type = 4, color = '#27adde'))
                 )
              )
       )

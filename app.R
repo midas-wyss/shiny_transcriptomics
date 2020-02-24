@@ -108,8 +108,12 @@ server <- function(input, output, session) {
   
   # Select team(s) that have project(s) enabled for this app
   enabled_teams = team_ids[team_ids %in% names(PROJECT_CONFIG)]
-  # TEMP use the first team
-  TEAM_ID = enabled_teams[1]
+  # TODO
+  if ('team_3402263' %in% team_ids){
+    TEAM_ID = 'team_3402263'
+  } else{
+    logged_in(F)
+  }
   
   # Get projects associated with that team - why is this empty?
   projects_response <- get_synapse_projects(access_token)
@@ -387,7 +391,9 @@ server <- function(input, output, session) {
   
   diffExprData <- reactiveValues(group1_samples = NULL,
                                  group2_samples = NULL,
-                                 diff_expr_result = NULL)
+                                 diff_expr_result = NULL,
+                                 diff_expr_csv = NULL,
+                                 boxplot_df = NULL)
   
   volcano_column <- reactive({ input$select_volcano_column })
   group1_criteria <- reactive({ input$select_group1_criteria })
@@ -396,6 +402,7 @@ server <- function(input, output, session) {
   group2 <- reactive({ diffExprData$group2_samples })
   
   most_recent_result <- reactive({ diffExprData$diff_expr_result })
+  boxplot_dat <- reactive({ diffExprData$boxplot_df })
   
   observeEvent(volcano_column(), {
     column = volcano_column()
@@ -461,7 +468,15 @@ server <- function(input, output, session) {
         & !is.null(group1_filter) & !is.null(group2_filter)){
       
       out_filename = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.csv')
+      diffExprData$diff_expr_csv <- out_filename
       out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
+      
+      # Trigger new barplot
+      count_data_tmp = count_data[,c(a, b)]
+      sample_data_tmp = sample_data[c(a, b),]
+      count_data_tmp2 = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
+      names(count_data_tmp2)[1] = column
+      diffExprData$boxplot_df <- count_data_tmp2
       
       if (file.exists(out_filename)){
         deg_tab = read.csv(out_filename, stringsAsFactors = F)
@@ -469,8 +484,6 @@ server <- function(input, output, session) {
       } else{
         
         # Voom it up
-        count_data_tmp = count_data[,c(a, b)]
-        sample_data_tmp = sample_data[c(a, b),]
         model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
         colnames(model_matrix) = c(group1_filter, group2_filter)
         count_data_voomed = voom(count_data_tmp, model_matrix)
@@ -513,8 +526,8 @@ server <- function(input, output, session) {
   
   output$volcano_plot <- renderPlotly({
     
-    group1_filter = group1_criteria()
-    group2_filter = group2_criteria()
+    group1_filter = isolate(group1_criteria())
+    group2_filter = isolate(group2_criteria())
     
     deg_results = most_recent_result()
     p_cutoff = 0.05
@@ -599,11 +612,23 @@ server <- function(input, output, session) {
       
       # Replace gene names with hyperlink
       gene_names = df$Gene
-      gene_links = sapply(gene_names, function(s){
-        # <a href="https://www.w3schools.com" target="_blank">Visit W3Schools</a>
+      df$Gene = sapply(gene_names, function(s){
         HTML(paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?gene=", s, "' target='_blank'>", s,"</a>"))
       })
-      df$Gene = gene_links
+      df = df[,c('Gene', 'adj.P.Val', 'logFC', 'AveExpr')]
+      names(df)[2] = c('adjPVal')
+      
+      # Add protein links
+      df$Protein = sapply(gene_names, function(s){
+        # Human Protein Atlas
+        paste0(HTML(paste0("<a href='https://www.proteinatlas.org/search/", s, "' target='_blank'>", 'Human Protein Atlas',"</a>")), ' | ',
+               HTML(paste0("<a href='https://www.uniprot.org/uniprot/?fil=organism%3A%22Homo+sapiens+%28Human%29+%5B9606%5D%22&sort=score&query=", s, "' target='_blank'>", 'UniProt',"</a>")))
+      })
+      
+      # Round
+      df$logFC = round(as.numeric(df$logFC), 3)
+      df$AveExpr = round(as.numeric(df$AveExpr), 3)
+      df$adjPVal = formatC(df$adjPVal, format = "e", digits = 3)
       
       # Display
       return(datatable(df, rownames = F, selection = 'none',
@@ -612,6 +637,33 @@ server <- function(input, output, session) {
       return(NULL)
     }
   })
+  
+  output$download_diff_expr_table <- downloadHandler(
+    filename = function(){
+      if (!is.null(diffExprData$diff_expr_csv)){
+        gsub('data/', '', diffExprData$diff_expr_csv)
+      }
+    },
+    content = function(file) {
+      if (!is.null(diffExprData$diff_expr_csv)){
+        file.copy(diffExprData$diff_expr_csv, file)
+      }
+    }
+  )
+  
+  #output$gene_box_plot <- renderPlotly({
+  #  
+  #  group1_filter = isolate(group1_criteria())
+  #  group2_filter = isolate(group2_criteria())
+  #  
+  #  deg_results = most_recent_result()
+  #  p_cutoff = 0.05
+  #  upper_fc_cutoff = 1
+  #  lower_fc_cutoff = -1
+    
+  #  if (!is.null(deg_results)){
+  #  }
+  #})
   
 }
 
