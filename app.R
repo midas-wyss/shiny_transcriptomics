@@ -36,27 +36,27 @@ if (!dir.exists('data')){
   dir.create('data')
 }
 
+# ------------------------ Virtualenv setup -------------------------- #
+if (Sys.info()[['sysname']] != 'Darwin'){
+  # When running on shinyapps.io, create a virtualenv 
+  reticulate::virtualenv_create(envname = 'python35_txn_env', 
+                                python = '/usr/bin/python3')
+  reticulate::virtualenv_install('python35_txn_env', 
+                                 packages = c('synapseclient', 'requests'))
+}
+reticulate::use_virtualenv('python35_txn_env', required = T)
+reticulate::source_python('connect_to_synapse.py')
+
+# ---------------------------- OAuth --------------------------------- #
+# Initialize Synapse client
+login_to_synapse(username = Sys.getenv('SYN_USERNAME'),
+                 api_key = Sys.getenv('SYN_API_KEY'))
+logged_in <- reactiveVal(FALSE)
+source('oauth.R')
+
 # ----------------------------------- Server --------------------------------- #
 
 server <- function(input, output, session) {
-  
-  # ------------------------ Virtualenv setup -------------------------- #
-  if (Sys.info()[['sysname']] != 'Darwin'){
-    # When running on shinyapps.io, create a virtualenv 
-    reticulate::virtualenv_create(envname = 'python35_txn_env', 
-                                  python = '/usr/bin/python3')
-    reticulate::virtualenv_install('python35_txn_env', 
-                                   packages = c('synapseclient', 'requests'))
-  }
-  reticulate::use_virtualenv('python35_txn_env', required = T)
-  reticulate::source_python('connect_to_synapse.py')
-  
-  # ---------------------------- OAuth --------------------------------- #
-  # Initialize Synapse client
-  login_to_synapse(username = Sys.getenv('SYN_USERNAME'),
-                   api_key = Sys.getenv('SYN_API_KEY'))
-  logged_in <- reactiveVal(FALSE)
-  source('oauth.R')
   
   # Click on the 'Log in' button to kick off the OAuth round trip
   observeEvent(input$action, {

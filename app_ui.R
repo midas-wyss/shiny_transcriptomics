@@ -19,8 +19,6 @@ AnonymousUI <- fluidPage(
   title = 'Transcriptomics Explorer',
   
   # Wyss logo
-  #div(img(src = paste0('www/wyss-logo-full-white-small.png'), width = '300px'),
-  #    style='text-align: center; padding-top: 30px;'),
   div(img(src = paste0('www/wyss-logo-white.png'), width = '200px'),
       style='text-align: center; padding-top: 30px;'),
   
@@ -88,16 +86,16 @@ AuthenticatedUI <- dashboardPage(
                               .skin-blue .sidebar-menu > li:hover > a { border-left-color: #1ea0cf;}'
     ))),
     selectInput('project_select', 'Project',
-                list('NIH Influenza'= c('Healthy vs COPD'))),
+                list('NIH Influenza' = c('Healthy vs COPD', 'Alveolar'))),
     div(actionLink('info_modal', 'What are Projects?', 
                    style = 'color: #27adde;'), 
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
       menuItem("Samples overview", tabName = "tab_samples", icon = icon("vial")),
-      menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar")),
-      menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
-      menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
-      menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
+      menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar"))
+      #menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
+      #menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
+      #menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
     ),
     br(),
     div(img(src = paste0('www/wyss-logo-white-square.png'), width = '150px'),
@@ -157,7 +155,12 @@ AuthenticatedUI <- dashboardPage(
                     width = 12,
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_sample_metadata'),
-                                    type = 4, color = '#27adde'))
+                                    type = 4, color = '#27adde')),
+                    div(style = 'padding-left: 20px; padding-bottom: 40px;',
+                        downloadButton('download_metadata_table', 'Download full table (.csv)',
+                                       style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
+        border-radius: 5px;')
+                    )
                 )
               )
       ),
@@ -192,19 +195,16 @@ AuthenticatedUI <- dashboardPage(
                     div(style = 'padding-top: 40px; padding-left: 20px; clear: left;',
                         actionButton('button_run_volcano', 'Run analysis',
                                      icon = icon("angle-double-right"),
-                                     style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
-      border-radius: 5px;')
+                                     style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf; border-radius: 5px;')
                     ),
                     div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
                         div(style = 'float: left; padding-right: 20px;',
                           downloadButton('download_volcano_pdf', 'Download plot (.pdf)',
-                            style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
-        border-radius: 5px;')
+                            style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf; border-radius: 5px;')
                         ),
                         div(style = 'float: left;',
                           downloadButton('download_volcano_methods', 'Download legend & methods (.txt)',
-                                         style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
-        border-radius: 5px;')
+                                         style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf; border-radius: 5px;')
                         )
                     )
                 ),
@@ -218,30 +218,39 @@ AuthenticatedUI <- dashboardPage(
               ),
               fluidRow(
                 box(title = "Differentially expressed genes",
-                    width = 12,
+                    width = 6,
                     div(style = 'padding-left: 20px; padding-bottom: 20px; color: #D2D6DD;',
                         textOutput('message_differential_expression')),
                     div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
                         withSpinner(dataTableOutput('table_differential_expression'),
-                                    type = 4, color = '#27adde'))
+                                    type = 4, color = '#27adde')),
+                    div(style = 'padding-left: 20px; padding-bottom: 40px;',
+                        downloadButton('download_diff_expr_table', 'Download full table (.csv)',
+                                       style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
+        border-radius: 5px;')
+                    )
+                ),
+                box(title = "Box and whisker plot",
+                    width = 6,
+                    p('Placeholder')
                 )
-              )
-      ),
-      
-      tabItem(tabName = "tab_pathway_enrichment",
-              h2("Pathway enrichment"),
-              h5('In progress')
-      ),
-      
-      tabItem(tabName = "tab_biomarkers",
-              h2("Biomarker Identification"),
-              h5('In progress')
-      ),
-      
-      tabItem(tabName = "tab_druid",
-              h2("DRUID"),
-              h5('In progress')
+             )
       )
+      
+      #tabItem(tabName = "tab_pathway_enrichment",
+      #        h2("Pathway enrichment"),
+      #        h5('Coming soon!')
+      #),
+      
+      #tabItem(tabName = "tab_biomarkers",
+      #        h2("Biomarker Identification"),
+      #        h5('Coming soon!')
+      #),
+      
+      #tabItem(tabName = "tab_druid",
+      #        h2("DRUID"),
+      #        h5('Coming soon!')
+      #)
     )
   )
 )
