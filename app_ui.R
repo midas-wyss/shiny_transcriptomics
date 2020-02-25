@@ -16,13 +16,13 @@ source('plot_helpers.R')
 AnonymousUI <- fluidPage(
   tags$head(tags$link(rel="stylesheet", type="text/css", href="bootstrap_rani.css"),
             HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
-  title = 'Transcriptomics Dashboard',
+  title = 'Transcriptomics Explorer',
   
   # Wyss logo
   div(img(src = paste0('www/wyss-logo-white.png'), width = '200px'),
       style='text-align: center; padding-top: 30px;'),
   
-  h1('Transcriptomics Dashboard'),
+  h1('Transcriptomics Explorer'),
   
   # DNA
   div(style='position: relative; height: 300px; margin-top: -80px;',
@@ -63,7 +63,7 @@ AnonymousUI <- fluidPage(
 AuthenticatedUI <- dashboardPage(
   skin = 'blue',
   
-  dashboardHeader(title = 'Transcriptomics Dashboard',
+  dashboardHeader(title = 'Transcriptomics Explorer',
                   titleWidth = 250,
                   tags$li(class = "dropdown",
                           tags$li(class = "dropdown", 
@@ -83,7 +83,14 @@ AuthenticatedUI <- dashboardPage(
                               background-color: #27adde !important;
                               }
                               .skin-blue .sidebar-menu > li.active > a,
-                              .skin-blue .sidebar-menu > li:hover > a { border-left-color: #1ea0cf;}'
+                              .skin-blue .sidebar-menu > li:hover > a { border-left-color: #1ea0cf;}
+                              .table.dataTable tbody tr.active td {
+                                  background-color: #27adde !important;
+                                  color: white;
+                              }
+                              .table.dataTable tbody tr.active td a {
+                                  color: white;
+                              }'
     ))),
     selectInput('project_select', 'Project',
                 list('NIH Influenza' = c('Healthy vs COPD', 'Alveolar'))),
@@ -98,12 +105,12 @@ AuthenticatedUI <- dashboardPage(
       #menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
     ),
     br(),
-    div(img(src = paste0('www/wyss-logo-white-square.png'), width = '150px'),
-        style = 'margin: 116px 18px 20px 9px'),
-    div(style = 'font-size: 8pt; margin: 0px 20px 0 20px',
-        p('This tool was developed by the Predictive BioAnalytics group'),
+    div(style = 'position: fixed; bottom: 20px; margin: 0px 20px 0 20px; width: 180px;',
+        img(src = 'www/wyss-logo-white-square.png', width = '140px'),
+        p('This tool was developed by the Predictive BioAnalytics group',
+          style = 'font-size: 8pt; margin-top: 10px',),
         a('Contact us!', href = 'https://midas-wyss.github.io/', 
-          target = '_blank', style = 'color: #27adde;')
+          target = '_blank', style = 'font-size: 8pt; color: #27adde;')
     )
   ),
   
@@ -126,7 +133,7 @@ AuthenticatedUI <- dashboardPage(
                     width = 7,
                     height = 500,
                     div(style = 'padding-left: 20px;',
-                      p(style='color: #D2D6DD;', 'Hover over points to view sample info')
+                      p(style='color: #D2D6DD;', 'Hover over a point to view the sample name')
                     ),
                     div(withSpinner(plotlyOutput('umap_plot'),
                                     type = 4, color = '#27adde'),
@@ -145,7 +152,7 @@ AuthenticatedUI <- dashboardPage(
                                        choices = 'Loading...',
                                        selected = character(0))
                     ),
-                    div(style = 'padding-top: 20px; padding-left: 20px; clear: left;',
+                    div(style = 'padding-top: 50px; padding-left: 20px; clear: left;',
                         downloadButton('download_umap_pdf', 'Download plot (.pdf)',
                                    style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
     border-radius: 5px;')
@@ -169,7 +176,7 @@ AuthenticatedUI <- dashboardPage(
                     div(style='padding-left: 20px; padding-bottom: 10px;', 
                         uiOutput('info_samples')),
                     width = 12,
-                    div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
+                    div(style = 'padding-left: 20px; overflow-y: auto;',
                         withSpinner(dataTableOutput('table_sample_metadata'),
                                     type = 4, color = '#27adde')),
                     div(style = 'padding-left: 20px; padding-bottom: 40px;',
@@ -184,7 +191,10 @@ AuthenticatedUI <- dashboardPage(
       tabItem(tabName = "tab_diff_expr",
               h2('Differential Expression'),
               fluidRow(
-                box(title = "Set parameters for analysis", 
+                box(title = "Set parameters for analysis",
+                    div(style = 'padding-left: 20px;',
+                        p(style='color: #D2D6DD;', 'Select the criteria for comparing two sample groups')
+                    ),
                     width = 6,
                     height = 500,
                     div(style='padding-left: 20px;',
@@ -224,7 +234,14 @@ AuthenticatedUI <- dashboardPage(
                         )
                     )
                 ),
-                box(title = "Volcano plot of differentially expressed genes",
+                box(title = tagList("Volcano plot of differentially expressed genes",
+                                    HTML('&nbsp;&nbsp;'),
+                                    tags$i(
+                                      class = "fa fa-info-circle", 
+                                      style = "color: #27adde; font-size: 8pt;"
+                                    ),
+                                    actionLink('info_volcano_modal', label = 'What is this?',
+                                               style = 'font-size: 8pt; color: #27adde;')),
                     width = 6,
                     height = 500,
                     uiOutput('volcano_message'),
