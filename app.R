@@ -136,7 +136,9 @@ server <- function(input, output, session) {
   # Logout modal
   observeEvent(input$user_account_modal, {
     showModal(
-      modalDialog(title = "Synapse Account Information",
+      modalDialog(title = tagList(
+                          img(src = 'www/synapse_logo.png', width = 200)
+                  ),
                   h4(paste0(profile_response$firstName, ' ', profile_response$lastName)),
                   p(profile_response$company),
                   p(user_response$email, style = 'color: #27adde;'),
@@ -153,10 +155,11 @@ server <- function(input, output, session) {
   })
   
   # Project info modal
-  observeEvent(input$info_modal, {
+  observeEvent(input$info_projects_modal, {
     showModal(modalDialog(
       title = 'Selecting a Synapse Project',
-      p("The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some projects may not be enabled for this app."),
+      p("The Projects listed in this dropdown menu are associated with your Synapse account. You must be granted access to a Project in Synapse in order to view it here. Note that some Projects may not be enabled for this app."),
+      p("If you belong to multiple Teams on Synapse, the Projects you see in this menu will be grouped underneath the Team name."),
       p("Contact the Predictive BioAnalytics group (", 
         a('midas@wyss.harvard.edu', href='mailto:midas@wyss.harvard.edu',
           style = 'color: #27adde;'), 
@@ -269,6 +272,38 @@ server <- function(input, output, session) {
   selected_color_column <- reactive({ input$umap_color_by })
   selected_shape_column <- reactive({ input$umap_shape_by })
   
+  observeEvent(input$info_umap_modal, {
+    showModal(
+      modalDialog(title = "Visualizing sample similarity with UMAP",
+                  p('This plot helps us visualize how similar or different samples are, based on their gene expression. 
+                    Similar to a principal components analysis (PCA), the Uniform Manifold Approximation and 
+                    Projection (UMAP) algorithm is used here for dimensionality reduction. Briefly, UMAP takes the 
+                    expression profile (all genes measured in the experiment, typically 15,000 - 30,000 genes) for every sample 
+                    and condenses that information down so that it can be displayed in 2 dimensions. The output is a 
+                    plot that summarizes sample-to-sample similarity.'),
+                  p("Let's look at the following example plot: "),
+                  div(style = 'padding: 30px;',
+                      img(src = 'www/umap_example.png', width = 500)),
+                  p('A couple of insights can be gleaned from the plot above. First, we see that samples from Group 1 (
+                    red), Group 2 (green), and Group 3 (blue) tend to cluster near other samples from the same group. This 
+                    means that samples within each Group have similar expression profiles.'),
+                  p('Secondly, we see that Group 1, 2, and 3 samples that have been treated with drug (triangle shape) 
+                    still cluster by group (color), but all drug-treated samples cluster together too, showing that the 
+                    drug treatment likely had a consistent effect on samples from all Groups.'),
+                  p("Finally, there is one outlier green triangle point at the very bottom of the plot. Given the consistency 
+                    of the other sample clustering, this sample appears to be a clear outlier. It's possible that 
+                    the sample was mislabeled or that something went wrong during the RNA-seq/microarray measurement. When this happens,
+                    it's worth performing some additional quality checks to investigate the cause."),
+                  strong('References:'),
+                  p("Leland McInnes, John Healy, James Melville. UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction. 2018. ", 
+                    a('Read the paper', href='https://arxiv.org/pdf/1802.03426.pdf',
+                      target = '_blank', style = 'color: #27adde;'), 
+                    " (opens in a new window)."),
+                  easyClose = T,
+                  footer = NULL)
+      )
+  })
+  
   output$umap_plot <- renderPlotly({
     
     # User input plot params
@@ -291,7 +326,7 @@ server <- function(input, output, session) {
       n_colors = length(unique(plot_df[,color_column]))
       n_symbols = length(unique(plot_df[,shape_column]))
       plot_cols = c('#27adde', sample(PLOT_COLORS, n_colors-1))
-      plot_symbols = sample(PLOT_SHAPES, n_symbols)  
+      plot_symbols = sample(PLOT_SHAPES, n_symbols)
       
       # Plot
       p <- plot_ly(data = plot_df, x = ~V1, y = ~V2,
@@ -379,13 +414,19 @@ server <- function(input, output, session) {
     }
   })
   
-  # Link to file on Synapse
-  output$info_samples <- renderUI({
-    actionLink('view_synapse_metadata', 'View original file on Synapse', 
-             style = 'color: #27adde;',
-             onclick = paste0("window.open('https://www.synapse.org/#!Synapse:", 
-                              ANALYSIS$metadata, "', '_blank')"))
-    })
+  observeEvent(input$info_sample_metadata_modal, {
+    showModal(
+      modalDialog(title = "Sample metadata table",
+                  p('This table contains annotations describing each sample used in the experiment. The data was 
+                    uploaded to Synapse and can be modified on Synapse if corrections are needed. The color and shape 
+                    parameters for the UMAP plot above are dynamically generated from the column names of this file, 
+                    so column names can vary as needed by experiment as long as the sample ID is in the first column.'),
+                  a('View the original file on Synapse', href = paste0('https://www.synapse.org/#!Synapse:', ANALYSIS$metadata),
+                      target = '_blank', style = 'color: #27adde;'),
+                  easyClose = T,
+                  footer = NULL)
+    )
+  })
   
   # ------------------------- Tab 2: Diff Expr ------------------------- #
   
@@ -402,7 +443,7 @@ server <- function(input, output, session) {
   group2 <- reactive({ diffExprData$group2_samples })
   
   most_recent_result <- reactive({ diffExprData$diff_expr_result })
-  boxplot_dat <- reactive({ diffExprData$boxplot_df })
+  most_recent_boxplot <- reactive({ diffExprData$boxplot_df })
   
   observeEvent(volcano_column(), {
     column = volcano_column()
@@ -631,7 +672,9 @@ server <- function(input, output, session) {
       df$adjPVal = formatC(df$adjPVal, format = "e", digits = 3)
       
       # Display
-      return(datatable(df, rownames = F, selection = 'none',
+      return(datatable(df, rownames = F, 
+                       selection = 'single',
+                       options = list(dom = 't'),
                        style = 'bootstrap', escape = F))
     } else{
       return(NULL)
@@ -651,19 +694,72 @@ server <- function(input, output, session) {
     }
   )
   
-  #output$gene_box_plot <- renderPlotly({
-  #  
-  #  group1_filter = isolate(group1_criteria())
-  #  group2_filter = isolate(group2_criteria())
-  #  
-  #  deg_results = most_recent_result()
-  #  p_cutoff = 0.05
-  #  upper_fc_cutoff = 1
-  #  lower_fc_cutoff = -1
+  selected_gene <- reactive({ 
+    row_selected = input$table_differential_expression_rows_selected
+    df = most_recent_result()
+    if (!is.null(row_selected)){
+      return(df[row_selected,1])
+    } else{
+      # Show the top hit
+      return(df$Gene[1])
+    }
+  })
+  
+  output$gene_boxplot <- renderPlotly({
     
-  #  if (!is.null(deg_results)){
-  #  }
-  #})
+    barplot_df = most_recent_boxplot()
+    barplot_df$Sample_ID = row.names(barplot_df)
+    gene = selected_gene()
+      
+    if (!is.null(barplot_df)){
+    
+      p <- plot_ly(type = 'box', data = barplot_df, 
+                   x = ~get(names(barplot_df)[1]), y = ~get(gene),
+                   hoverinfo='none') %>%
+           add_markers(~get(names(barplot_df)[1]), y = ~get(gene),
+                       type = 'scatter', mode = 'markers',
+                       hoverinfo = 'text',
+                       text = ~Sample_ID) %>%
+           layout(showlegend = FALSE,
+                  title = gene,
+                  xaxis = list(title = 'Sample Group'),
+                  yaxis = list(title = paste0(gene, ' (gene counts)')))
+      
+    } else{
+      return(NULL)
+    }
+  })
+  
+  output$row_diff_expr_results <- renderUI({
+    barplot_df = most_recent_boxplot()
+    if (!is.null(barplot_df)){
+      return(tagList(
+        box(title = "Differentially expressed genes",
+            width = 6,
+            div(style = 'padding-left: 20px; padding-bottom: 20px; color: #D2D6DD;',
+                textOutput('message_differential_expression')),
+            div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
+                withSpinner(dataTableOutput('table_differential_expression'),
+                            type = 4, color = '#27adde')),
+            div(style = 'padding: 20px;',
+                downloadButton('download_diff_expr_table', 'Download full table (.csv)',
+                               style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
+            border-radius: 5px;')
+            )
+        ),
+        box(title = "Box and whisker plot",
+            width = 6,
+            div(withSpinner(plotlyOutput('gene_boxplot'),
+                            type = 4, color = '#27adde')),
+            div(style = 'padding: 20px;',
+                downloadButton('download_gene_boxplot', 'Download boxplot (.pdf)',
+                               style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
+            border-radius: 5px;')
+            )
+        ))
+      )
+    }
+  })
   
 }
 
