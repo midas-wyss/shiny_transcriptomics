@@ -325,7 +325,7 @@ server <- function(input, output, session) {
       plot_df[,shape_column] = as.factor(plot_df[,shape_column])
       n_colors = length(unique(plot_df[,color_column]))
       n_symbols = length(unique(plot_df[,shape_column]))
-      plot_cols = c('#27adde', sample(PLOT_COLORS, n_colors-1))
+      plot_cols = c('#27adde', sample(PLOT_COLORS[-10], n_colors-1))
       plot_symbols = sample(PLOT_SHAPES, n_symbols)
       
       # Plot
@@ -555,13 +555,40 @@ server <- function(input, output, session) {
     }
   })
   
+  observeEvent(input$info_volcano_modal, {
+    showModal(
+      modalDialog(title = "Visualizing differential gene expression with volcano plots",
+                  p('A volcano plot summarizes both the magnitude of expression change (x axis) and the statistical 
+                    significance (y axis). Each point represents a gene.'),
+                  p("Let's look at the following example plot: "),
+                  div(style = 'padding: 30px;',
+                      img(src = 'www/volcano_example.png', width = 500)),
+                  p('In the plot above, the genes represented by green points had significantly lower expression in 
+                    the Experimental samples compared to the samples in the Control group. Likewise, the genes represented 
+                    by red points had significantly higher expression in the Experimental group. A "significant" change 
+                    means an adjusted p-value of < 0.05. Genes represented by grey points did not show a significant difference 
+                    in expression in the Experimental samples compared to the Control.'),
+                  strong('References:'),
+                  p("Matthew E. Ritchie, Belinda Phipson, Di Wu, Yifang Hu, Charity W. Law, Wei Shi, Gordon K. Smyth. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research. 2015.",
+                    a('View the paper', href='https://academic.oup.com/nar/article/43/7/e47/2414268',
+                      target = '_blank', style = 'color: #27adde;'), 
+                    " (opens in a new window)."),
+                  p("Leland McInnes, John Healy, James Melville. UMAP: Uniform Manifold Approximation and Projection for Dimension Reduction. 2018. ", 
+                    a('View the limma R package vignette', href='https://bioconductor.org/packages/release/bioc/html/limma.html',
+                      target = '_blank', style = 'color: #27adde;'), 
+                    " (opens in a new window)."),
+                  easyClose = T,
+                  footer = NULL)
+    )
+  })
+  
   output$volcano_message <- renderUI({
     if (is.null(diffExprData$diff_expr_result)){
       return(p(style='padding-left: 20px; color: #D2D6DD;', 
                'Use the section to the left to set analysis parameters and click "Run analysis" to view results'))
     } else{
       return(p(style='padding-left: 20px; color: #D2D6DD;',
-               'Hover over points to view gene info'))
+               'Hover over a point to view the gene name'))
     }
   })
   
@@ -613,14 +640,6 @@ server <- function(input, output, session) {
       dev.off()
       
       return(p)
-    } else{
-      return(NULL)
-    }
-  })
-  
-  output$message_differential_expression <- renderText({
-    if (is.null(diffExprData$diff_expr_result)){
-      return("Choose the groups of samples you'd like to compare above, then click 'Run Analysis' to view volcano plot and differentially expressed genes table")
     } else{
       return(NULL)
     }
@@ -707,41 +726,104 @@ server <- function(input, output, session) {
   
   output$gene_boxplot <- renderPlotly({
     
-    barplot_df = most_recent_boxplot()
-    barplot_df$Sample_ID = row.names(barplot_df)
+    boxplot_df = most_recent_boxplot()
+    boxplot_df$Sample_ID = row.names(boxplot_df)
+    # To allow coloring of points
+    group_column = names(boxplot_df)[1]
+    boxplot_df$Color_ID = sapply(boxplot_df[,group_column], function(s) paste0('X', s))
     gene = selected_gene()
-      
-    if (!is.null(barplot_df)){
+    boxplot_df[,gene] = log2(as.numeric(boxplot_df[,gene]))
     
-      p <- plot_ly(type = 'box', data = barplot_df, 
-                   x = ~get(names(barplot_df)[1]), y = ~get(gene),
-                   hoverinfo='none') %>%
-           add_markers(~get(names(barplot_df)[1]), y = ~get(gene),
+    boxplot_cols = c('#CCCCCC', '#CCCCCC', PLOT_COLORS[5], '#27adde')
+    names(boxplot_cols) = c(sort(as.character(unique(boxplot_df[,group_column]))),
+                            sort(unique(boxplot_df$Color_ID)))
+      
+    if (!is.null(boxplot_df)){
+      
+      p <- plot_ly(type = 'box', data = boxplot_df, 
+                   x = ~get(names(boxplot_df)[1]), y = ~get(gene),
+                   hoverinfo='none',
+                   color = ~get(names(boxplot_df)[1]),
+                   colors = boxplot_cols) %>%
+           add_markers(~get(names(boxplot_df)[1]), y = ~get(gene),
                        type = 'scatter', mode = 'markers',
                        hoverinfo = 'text',
-                       text = ~Sample_ID) %>%
+                       symbol = 21,
+                       text = ~Sample_ID,
+                       color = ~Color_ID,
+                       marker = list(
+                         size = 10,
+                         line = list(
+                           color = '#212D32',
+                           width = 1
+                       ))) %>%
            layout(showlegend = FALSE,
                   title = gene,
                   xaxis = list(title = 'Sample Group'),
-                  yaxis = list(title = paste0(gene, ' (gene counts)')))
+                  yaxis = list(title = paste0(gene, ' (log2 gene counts)')))
+      
+      # Save plot as PDF
+      pdf(paste0('data/gene_barplot_', gene, '.pdf'), 
+          height = 6, width = 4)
+      boxplot(get(gene)~get(group_column), data = boxplot_df,
+              col = 'lightgrey', las = 1,
+              main = gene, xlab = '',
+              ylab = paste0(gene, ' (log2 counts)'))
+      points(get(gene)~get(group_column), data = boxplot_df,
+             pch = 21, bg = boxplot_cols[boxplot_df$Color_ID])
+      dev.off()
+      
+      return(p)
       
     } else{
       return(NULL)
     }
   })
   
+  # Download gene boxplot plot as a PDF
+  output$download_boxplot_pdf <- downloadHandler(
+    filename = function(){
+      paste0('gene_barplot_', selected_gene(), '.pdf')
+    },
+    content = function(file) {
+      file.copy(paste0('data/gene_barplot_', selected_gene(), '.pdf'), file)
+    }
+  )
+  
+  observeEvent(input$info_diffexpr_modal, {
+    showModal(
+      modalDialog(title = "Differentially expressed gene table",
+                  p("This table shows each gene and it's log fold change (logFC) calculated from comparing 
+                    Group A - Group B according to the criteria you selected."),
+                  strong('References:'),
+                  p("Matthew E. Ritchie, Belinda Phipson, Di Wu, Yifang Hu, Charity W. Law, Wei Shi, Gordon K. Smyth. limma powers differential expression analyses for RNA-sequencing and microarray studies. Nucleic Acids Research. 2015.",
+                    a('View the paper', href='https://academic.oup.com/nar/article/43/7/e47/2414268',
+                      target = '_blank', style = 'color: #27adde;'), 
+                    " (opens in a new window)."),
+                  easyClose = T,
+                  footer = NULL)
+    )
+  })
+  
   output$row_diff_expr_results <- renderUI({
-    barplot_df = most_recent_boxplot()
-    if (!is.null(barplot_df)){
+    boxplot_df = most_recent_boxplot()
+    if (!is.null(boxplot_df)){
       return(tagList(
-        box(title = "Differentially expressed genes",
+        box(title = tagList("Differentially expressed genes",
+                            HTML('&nbsp;&nbsp;'),
+                            tags$i(
+                              class = "fa fa-info-circle", 
+                              style = "color: #27adde; font-size: 8pt;"
+                            ),
+                            actionLink('info_diffexpr_modal', label = 'What is this?',
+                                       style = 'font-size: 8pt; color: #27adde;')),
             width = 6,
-            div(style = 'padding-left: 20px; padding-bottom: 20px; color: #D2D6DD;',
-                textOutput('message_differential_expression')),
-            div(style = 'padding-left: 20px; overflow-y: auto; height: 600px;',
-                withSpinner(dataTableOutput('table_differential_expression'),
+            height = 600,
+            div(style = 'padding-left: 20px;',
+                p(style='color: #D2D6DD;', "Click on a gene's row to display its barplot to the right")),
+            div(withSpinner(dataTableOutput('table_differential_expression'),
                             type = 4, color = '#27adde')),
-            div(style = 'padding: 20px;',
+            div(style = 'padding-left: 20px; padding-top: 52px;',
                 downloadButton('download_diff_expr_table', 'Download full table (.csv)',
                                style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
             border-radius: 5px;')
@@ -749,10 +831,13 @@ server <- function(input, output, session) {
         ),
         box(title = "Box and whisker plot",
             width = 6,
+            height = 600,
+            div(style = 'padding-left: 20px;',
+                p(style='color: #D2D6DD;', "Hover over a point to see the sample name")),
             div(withSpinner(plotlyOutput('gene_boxplot'),
                             type = 4, color = '#27adde')),
-            div(style = 'padding: 20px;',
-                downloadButton('download_gene_boxplot', 'Download boxplot (.pdf)',
+            div(style = 'padding-left: 20px; padding-top: 65px;',
+                downloadButton('download_boxplot_pdf', 'Download boxplot (.pdf)',
                                style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
             border-radius: 5px;')
             )
