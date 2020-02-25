@@ -9,6 +9,33 @@ addResourcePath(prefix = 'www', directoryPath = paste0(getwd(), '/www'))
 # https://stackoverflow.com/questions/57755830/how-to-redirect-to-a-dynamic-url-in-shiny
 jscode <- "Shiny.addCustomMessageHandler('customredirect', function(message) { window.location = message;});"
 
+drift_js <- '<script>
+"use strict";
+
+!function() {
+  var t = window.driftt = window.drift = window.driftt || [];
+  if (!t.init) {
+    if (t.invoked) return void (window.console && console.error && console.error("Drift snippet included twice."));
+    t.invoked = !0, t.methods = [ "identify", "config", "track", "reset", "debug", "show", "ping", "page", "hide", "off", "on" ], 
+    t.factory = function(e) {
+      return function() {
+        var n = Array.prototype.slice.call(arguments);
+        return n.unshift(e), t.push(n), t;
+      };
+    }, t.methods.forEach(function(e) {
+      t[e] = t.factory(e);
+    }), t.load = function(t) {
+      var e = 3e5, n = Math.ceil(new Date() / e) * e, o = document.createElement("script");
+      o.type = "text/javascript", o.async = !0, o.crossorigin = "anonymous", o.src = "https://js.driftt.com/include/" + n + "/" + t + ".js";
+      var i = document.getElementsByTagName("script")[0];
+      i.parentNode.insertBefore(o, i);
+    };
+  }
+}();
+drift.SNIPPET_VERSION = "0.3.1";
+drift.load("579ukhxa5466");
+</script>'
+
 source('plot_helpers.R')
 
 # ------------------------------- Pre-login UI ------------------------------ #
@@ -47,7 +74,8 @@ AnonymousUI <- fluidPage(
   ),
   
   # Login button
-  tags$head(tags$script(jscode)),
+  tags$head(tags$script(jscode),
+            HTML(drift_js)),
   div(actionButton("action", "Log in with Synapse"),
       style='text-align: center; padding-bottom: 100px;'),
   
@@ -109,13 +137,14 @@ AuthenticatedUI <- dashboardPage(
         img(src = 'www/wyss-logo-white-square.png', width = '140px'),
         p('This tool was developed by the Predictive BioAnalytics group',
           style = 'font-size: 8pt; margin-top: 10px',),
-        a('Contact us!', href = 'https://midas-wyss.github.io/', 
+        a('View our other apps', href = 'https://midas-wyss.github.io/', 
           target = '_blank', style = 'font-size: 8pt; color: #27adde;')
     )
   ),
   
   dashboardBody(
     tags$head(includeHTML('www/analytics.html'),
+              HTML(drift_js),
               tags$style(".shiny-output-error{color: white;}"),
               HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
     tabItems(
