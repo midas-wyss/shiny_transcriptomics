@@ -512,7 +512,7 @@ server <- function(input, output, session) {
       diffExprData$diff_expr_csv <- out_filename
       out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
       
-      # Trigger new barplot
+      # Trigger new boxplot
       count_data_tmp = count_data[,c(a, b)]
       sample_data_tmp = sample_data[c(a, b),]
       count_data_tmp2 = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
@@ -733,6 +733,8 @@ server <- function(input, output, session) {
     boxplot_df$Color_ID = sapply(boxplot_df[,group_column], function(s) paste0('X', s))
     gene = selected_gene()
     boxplot_df[,gene] = log2(as.numeric(boxplot_df[,gene]))
+    # TODO check these numbers
+    #boxplot_df[,gene] = as.numeric(boxplot_df[,gene])
     
     boxplot_cols = c('#CCCCCC', '#CCCCCC', PLOT_COLORS[5], '#27adde')
     names(boxplot_cols) = c(sort(as.character(unique(boxplot_df[,group_column]))),
@@ -760,15 +762,15 @@ server <- function(input, output, session) {
            layout(showlegend = FALSE,
                   title = gene,
                   xaxis = list(title = 'Sample Group'),
-                  yaxis = list(title = paste0(gene, ' (log2 gene counts)')))
+                  yaxis = list(title = paste0(gene, ' (gene counts)')))
       
       # Save plot as PDF
-      pdf(paste0('data/gene_barplot_', gene, '.pdf'), 
+      pdf(paste0('data/gene_boxplot_', gene, '.pdf'), 
           height = 6, width = 4)
       boxplot(get(gene)~get(group_column), data = boxplot_df,
               col = 'lightgrey', las = 1,
               main = gene, xlab = '',
-              ylab = paste0(gene, ' (log2 counts)'))
+              ylab = paste0(gene, ' (counts)'))
       points(get(gene)~get(group_column), data = boxplot_df,
              pch = 21, bg = boxplot_cols[boxplot_df$Color_ID])
       dev.off()
@@ -783,10 +785,10 @@ server <- function(input, output, session) {
   # Download gene boxplot plot as a PDF
   output$download_boxplot_pdf <- downloadHandler(
     filename = function(){
-      paste0('gene_barplot_', selected_gene(), '.pdf')
+      paste0('gene_boxplot_', selected_gene(), '.pdf')
     },
     content = function(file) {
-      file.copy(paste0('data/gene_barplot_', selected_gene(), '.pdf'), file)
+      file.copy(paste0('data/gene_boxplot_', selected_gene(), '.pdf'), file)
     }
   )
   
@@ -820,7 +822,7 @@ server <- function(input, output, session) {
             width = 6,
             height = 600,
             div(style = 'padding-left: 20px;',
-                p(style='color: #D2D6DD;', "Click on a gene's row to display its barplot to the right")),
+                p(style='color: #D2D6DD;', "Click on a gene's row to display its boxplot to the right")),
             div(withSpinner(dataTableOutput('table_differential_expression'),
                             type = 4, color = '#27adde')),
             div(style = 'padding-left: 20px; padding-top: 52px;',
