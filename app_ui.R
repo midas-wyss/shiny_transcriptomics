@@ -120,17 +120,17 @@ AuthenticatedUI <- dashboardPage(
                                   color: white;
                               }'
     ))),
-    selectInput('project_select', 'Project',
-                list('NIH Influenza' = c('Healthy vs COPD', 'Alveolar'))),
+    selectInput('project_select', 'Project', 'Loading...'),
     div(actionLink('info_projects_modal', 'What are Projects?', 
                    style = 'color: #27adde;'), 
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
       menuItem("Samples overview", tabName = "tab_samples", icon = icon("vial")),
-      menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar"))
-      #menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
-      #menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
-      #menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
+      #menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar")),
+      menuItem("Expression profiling", tabName = "tab_expr_profiles", icon = icon("th")),
+      menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
+      menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
+      menuItem("DRUID", tabName = "tab_druid", icon = icon("star"))
     ),
     br(),
     div(style = 'position: fixed; bottom: 20px; margin: 0px 20px 0 20px; width: 180px;',
@@ -217,6 +217,11 @@ AuthenticatedUI <- dashboardPage(
               )
       ),
       
+      tabItem(tabName = "tab_expr_profiles",
+              h2("Expression profiling"),
+              h5('Check back soon!')
+      ),
+      
       tabItem(tabName = "tab_diff_expr",
               h2('Differential Expression'),
               fluidRow(
@@ -281,22 +286,22 @@ AuthenticatedUI <- dashboardPage(
               fluidRow(
                 uiOutput('row_diff_expr_results')
              )
+      ),
+      
+      tabItem(tabName = "tab_pathway_enrichment",
+              h2("Pathway enrichment"),
+              h5('Check back soon!')
+      ),
+      
+      tabItem(tabName = "tab_biomarkers",
+              h2("Biomarker Identification"),
+              h5('Check back soon!')
+      ),
+      
+      tabItem(tabName = "tab_druid",
+              h2("DRUID"),
+              h5('Check back soon!')
       )
-      
-      #tabItem(tabName = "tab_pathway_enrichment",
-      #        h2("Pathway enrichment"),
-      #        h5('Coming soon!')
-      #),
-      
-      #tabItem(tabName = "tab_biomarkers",
-      #        h2("Biomarker Identification"),
-      #        h5('Coming soon!')
-      #),
-      
-      #tabItem(tabName = "tab_druid",
-      #        h2("DRUID"),
-      #        h5('Coming soon!')
-      #)
     )
   )
 )

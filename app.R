@@ -5,6 +5,7 @@ library(DT)
 library(plotly)
 options(repos = BiocManager::repositories())
 library(limma)
+library(DESeq2)
 
 DEBUG <- Sys.getenv('DEBUG') == 'TRUE'
 
@@ -106,13 +107,16 @@ server <- function(input, output, session) {
   team_ids = unlist(lapply(teams_response$results, function(l) paste0('team_', l$id)))
   teams_content_formatted = paste(teams, collapse = '\n')
   
-  # Select team(s) that have project(s) enabled for this app
+  # Format team(s) and project(s) enabled for this app that the user can access
   enabled_teams = team_ids[team_ids %in% names(PROJECT_CONFIG)]
-  # TODO
-  if ('team_3402263' %in% team_ids){
-    TEAM_ID = 'team_3402263'
-  } else{
-    logged_in(F)
+  PROJECT_DROPDOWN_LIST = list()
+  ALL_ANALYSES = list()
+  for (team_id in enabled_teams){
+    project = PROJECT_CONFIG[[team_id]]
+    PROJECT_DROPDOWN_LIST[project$project_name] = list(names(project$analyses))
+    for (analysis in names(project$analyses)){
+      ALL_ANALYSES[[analysis]] = c(PROJECT_CONFIG[[team_id]][['analyses']][[analysis]])
+    }
   }
   
   # Get projects associated with that team - why is this empty?
@@ -203,7 +207,10 @@ server <- function(input, output, session) {
   
   # -------------------------- Tab 1: Samples -------------------------- #
   
-  experimentData <- reactiveValues(sample_metadata_df = NULL,
+  experimentData <- reactiveValues(selected_project = NULL,
+                                   umap_color_by = NULL,
+                                   umap_shape_by = NULL,
+                                   sample_metadata_df = NULL,
                                    sample_color_columns = NULL,
                                    sample_shape_columns = NULL,
                                    gene_counts_df = NULL,
@@ -211,62 +218,69 @@ server <- function(input, output, session) {
                                    data_loaded = F)
   
   # Load the projects the user has access to
-  project_data = PROJECT_CONFIG[[TEAM_ID]]
-  analyses = project_data$analyses
-  ANALYSIS = analyses[[1]]
+  observeEvent(logged_in(), {
+    updateSelectInput(session, 'project_select', 
+                      choices = PROJECT_DROPDOWN_LIST)
+    experimentData$selected_project <- PROJECT_DROPDOWN_LIST[[1]][1]
+  })
   
-  # Load the sample data, gene counts, and UMAP for the analysis 
-  sample_metadata_csv = fetch_synapse_filepath(ANALYSIS$metadata)
-  experimentData$sample_metadata_df <- read.csv(sample_metadata_csv,
+  observeEvent(input$project_select, {
+    if (input$project_select != 'Loading...'){
+      experimentData$selected_project <- input$project_select
+    }
+  })
+  
+  selected_project <- reactive({ experimentData$selected_project })
+  
+  # Load the sample data, gene counts, and UMAP for the analysis
+  observeEvent(selected_project(), {
+    proj = selected_project()
+    if (!is.null(proj)){
+      ANALYSIS = ALL_ANALYSES[[proj]]
+      sample_metadata_csv = fetch_synapse_filepath(ANALYSIS$metadata)
+      experimentData$sample_metadata_df <- read.csv(sample_metadata_csv,
+                                                    stringsAsFactors = F)
+      gene_counts_csv = fetch_synapse_filepath(ANALYSIS$counts)
+      experimentData$gene_counts_df <- read.csv(gene_counts_csv,
                                                 stringsAsFactors = F)
-  gene_counts_csv = fetch_synapse_filepath(ANALYSIS$counts)
-  experimentData$gene_counts_df <- read.csv(gene_counts_csv,
-                                            row.names = 1,
-                                            stringsAsFactors = F)
-  umap_csv = fetch_synapse_filepath(ANALYSIS$umap)
-  experimentData$umap_df <- read.csv(umap_csv,
-                                     row.names = 1,
-                                     stringsAsFactors = F)
-  experimentData$data_loaded = T
+      umap_csv = fetch_synapse_filepath(ANALYSIS$umap)
+      experimentData$umap_df <- read.csv(umap_csv,
+                                         row.names = 1,
+                                         stringsAsFactors = F)
+      experimentData$data_loaded <- T
+      
+      # Extract colorable columns from column names
+      dat = experimentData$sample_metadata_df
+      experimentData$sample_color_columns <- sort(names(dat)[sapply(names(dat), function(x) {
+        length(unique(dat[,x])) <= 11
+      })])
+      
+      # Extract shapeable columns from column names
+      experimentData$sample_shape_columns <- sort(names(dat)[sapply(names(dat), function(x) {
+        length(unique(dat[,x])) <= 5
+      })])
+    }
+  })
   
   sample_dat <- reactive({ experimentData$sample_metadata_df })
   counts_dat <- reactive({ experimentData$gene_counts_df })
   umap_dat <- reactive({ experimentData$umap_df })
   loaded <- reactive({ experimentData$data_loaded })
+  color_columns <- reactive({ experimentData$sample_color_columns })
+  shape_columns <- reactive({ experimentData$sample_shape_columns })
   
-  # Extract colorable columns from column names
-  color_columns <- reactive({
-    dat = sample_dat()
-    if (!is.null(dat)){
-      return(sort(names(dat)[sapply(names(dat), function(x) {
-        length(unique(dat[,x])) <= 11
-      })]))
-    } else{
-      return(NULL)
+  observeEvent(selected_project(), {
+    proj = selected_project()
+    if (!is.null(proj)){
+      color_choices = color_columns()
+      shape_choices = shape_columns()
+      updateRadioButtons(session, 'umap_color_by', 
+                         choices = color_choices, selected = color_choices[1])
+      updateRadioButtons(session, 'umap_shape_by', 
+                         choices = shape_choices, selected = shape_choices[2])
+      updateSelectInput(session, 'select_volcano_column', 
+                        choices = 'condition_group_time', selected = 'condition_group_time')
     }
-  })
-  
-  # Extract shapeable columns from column names
-  shape_columns <- reactive({
-    dat = sample_dat()
-    if (!is.null(dat)){
-      return(sort(names(dat)[sapply(names(dat), function(x) {
-        length(unique(dat[,x])) <= 5
-      })]))
-    } else{
-      return(NULL)
-    }
-  })
-  
-  observeEvent(loaded(), {
-    color_choices = color_columns()
-    shape_choices = shape_columns()
-    updateRadioButtons(session, 'umap_color_by', 
-                       choices = color_choices, selected = color_choices[1])
-    updateRadioButtons(session, 'umap_shape_by', 
-                       choices = shape_choices, selected = shape_choices[2])
-    updateSelectInput(session, 'select_volcano_column', 
-                      choices = color_choices, selected = color_choices[1])
   })
   
   selected_color_column <- reactive({ input$umap_color_by })
@@ -314,74 +328,82 @@ server <- function(input, output, session) {
     plot_mat = umap_dat()
     sample_metadata = sample_dat()
     
-    if (loaded() & !is.null(color_column)){
-      # Format dataframe for plotting
-      row.names(sample_metadata) = sample_metadata$well_name
-      plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
-      names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
+    if (loaded() & !is.null(color_column) & !is.null(shape_column)){
       
-      # Make sure the color & shape columns are factors
-      plot_df[,color_column] = as.factor(plot_df[,color_column])
-      plot_df[,shape_column] = as.factor(plot_df[,shape_column])
-      n_colors = length(unique(plot_df[,color_column]))
-      n_symbols = length(unique(plot_df[,shape_column]))
-      plot_cols = c('#27adde', sample(PLOT_COLORS[-10], n_colors-1))
-      plot_symbols = sample(PLOT_SHAPES, n_symbols)
+      if (color_column %in% names(sample_metadata) &
+          shape_column %in% names(sample_metadata)){
       
-      # Plot
-      p <- plot_ly(data = plot_df, x = ~V1, y = ~V2,
-                   color = ~get(color_column), 
-                   colors = plot_cols,
-                   symbol = ~get(shape_column),
-                   symbols = plot_symbols,
-                   text = ~well_name,
-                   hovertemplate = '<b>Sample ID:</b> %{text}',
-                   type = 'scatter', mode = 'markers',
-                   marker = list(size = 10,
-                                 line = list(
-                                   color = '#212D32',
-                                   width = 1
-                                 )))
-      
-      # Save methods section
-      generate_umap_methods(nrow(counts_dat()), color_column, shape_column)
-      
-      # Save to PDF
-      pdf('data/sample_umap.pdf', height = 6, width = 8)
-      x_max = max(plot_df$V1)
-      x_min = min(plot_df$V1)
-      x_range = x_max - x_min
-      new_x_max = x_max + .5*x_range
-      pdf_colors = plot_cols
-      names(pdf_colors) = unique(plot_df[,color_column])
-      pdf_symbols = plot_symbols
-      names(pdf_symbols) = unique(plot_df[,shape_column])
-      
-      plot(plot_df$V1, plot_df$V2,
-           main = 'Sample UMAP',
-           xlab = 'UMAP dimension 1', 
-           ylab = 'UMAP dimension 2',
-           xlim = c(x_min, new_x_max),
-           pch = pdf_symbols[plot_df[,shape_column]],
-           bg = pdf_colors[plot_df[,color_column]],
-           las = 1)
-      
-      unique_colors = as.character(unique(plot_df[,color_column]))
-      unique_symbols = as.character(unique(plot_df[,shape_column]))
-      all_samples_combined = paste0(plot_df[,color_column], '__', plot_df[,shape_column])
-      unique_samples = unique(all_samples_combined)
-      
-      plot_legend = titlify(unique_samples)
-      plot_legend_colors = pdf_colors[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][1]))]
-      plot_legend_symbols = pdf_symbols[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][2]))]
-      legend('right', legend = plot_legend,
-             pt.bg = plot_legend_colors,
-             pch = plot_legend_symbols)
-      dev.off()
-      
-      # Display Plotly plot in UI
-      return(p)
-      
+        # Format dataframe for plotting
+        row.names(sample_metadata) = sample_metadata$Sample_ID
+        plot_df = cbind(sample_metadata[row.names(plot_mat),], plot_mat)
+        names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
+        
+        # Make sure the color & shape columns are factors
+        View(plot_df)
+        plot_df[,color_column] = as.factor(plot_df[,color_column])
+        plot_df[,shape_column] = as.factor(plot_df[,shape_column])
+        n_colors = length(unique(plot_df[,color_column]))
+        n_symbols = length(unique(plot_df[,shape_column]))
+        plot_cols = c('#27adde', sample(PLOT_COLORS[-10], n_colors-1))
+        plot_symbols = sample(PLOT_SHAPES, n_symbols)
+        
+        # Plot
+        p <- plot_ly(data = plot_df, x = ~V1, y = ~V2,
+                     color = ~get(color_column), 
+                     colors = plot_cols,
+                     symbol = ~get(shape_column),
+                     symbols = plot_symbols,
+                     text = ~Sample_ID,
+                     hovertemplate = '<b>Sample ID:</b> %{text}',
+                     type = 'scatter', mode = 'markers',
+                     marker = list(size = 10,
+                                   line = list(
+                                     color = '#212D32',
+                                     width = 1
+                                   )))
+        
+        # Save methods section
+        generate_umap_methods(nrow(counts_dat()), color_column, shape_column)
+        
+        # Save to PDF
+        pdf('data/sample_umap.pdf', height = 6, width = 8)
+        x_max = max(plot_df$V1)
+        x_min = min(plot_df$V1)
+        x_range = x_max - x_min
+        new_x_max = x_max + .5*x_range
+        pdf_colors = plot_cols
+        names(pdf_colors) = unique(plot_df[,color_column])
+        pdf_symbols = plot_symbols
+        names(pdf_symbols) = unique(plot_df[,shape_column])
+        
+        plot(plot_df$V1, plot_df$V2,
+             main = 'Sample Similarity (UMAP algorithm)',
+             xlab = 'UMAP dimension 1', 
+             ylab = 'UMAP dimension 2',
+             xlim = c(x_min, new_x_max),
+             pch = pdf_symbols[plot_df[,shape_column]],
+             bg = pdf_colors[plot_df[,color_column]],
+             las = 1)
+        
+        unique_colors = as.character(unique(plot_df[,color_column]))
+        unique_symbols = as.character(unique(plot_df[,shape_column]))
+        all_samples_combined = paste0(plot_df[,color_column], '__', plot_df[,shape_column])
+        unique_samples = unique(all_samples_combined)
+        
+        plot_legend = titlify(unique_samples)
+        plot_legend_colors = pdf_colors[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][1]))]
+        plot_legend_symbols = pdf_symbols[as.character(sapply(unique_samples, function(x) strsplit(x, '__')[[1]][2]))]
+        legend('right', legend = plot_legend,
+               pt.bg = plot_legend_colors,
+               pch = plot_legend_symbols)
+        dev.off()
+        
+        # Display Plotly plot in UI
+        return(p)
+        
+      } else{
+        return(NULL)
+      }
     } else{
       return(NULL)
     } 
@@ -389,7 +411,7 @@ server <- function(input, output, session) {
   
   # Download UMAP plot as a PDF
   output$download_umap_pdf <- downloadHandler(
-    filename = "Sample_UMAP.pdf",
+    filename = "Sample_similarity_UMAP.pdf",
     content = function(file) {
       file.copy("data/sample_umap.pdf", file)
     }
@@ -397,7 +419,7 @@ server <- function(input, output, session) {
   
   # Download UMAP methods as a .txt file
   output$download_umap_methods <- downloadHandler(
-    filename = "UMAP_methods.txt",
+    filename = "Sample_similarity_UMAP_methods.txt",
     content = function(file) {
       file.copy('data/methods/umap_filled.txt', file)
     }
@@ -436,7 +458,7 @@ server <- function(input, output, session) {
                                  diff_expr_csv = NULL,
                                  boxplot_df = NULL)
   
-  volcano_column <- reactive({ input$select_volcano_column })
+  volcano_column <- reactive({ return('condition_group_time') })
   group1_criteria <- reactive({ input$select_group1_criteria })
   group2_criteria <- reactive({ input$select_group2_criteria })
   group1 <- reactive({ diffExprData$group1_samples })
@@ -445,8 +467,8 @@ server <- function(input, output, session) {
   most_recent_result <- reactive({ diffExprData$diff_expr_result })
   most_recent_boxplot <- reactive({ diffExprData$boxplot_df })
   
-  observeEvent(volcano_column(), {
-    column = volcano_column()
+  observeEvent(loaded(), {
+    column = 'condition_group_time'
     dat = sample_dat()
     if (loaded() & column %in% names(dat)){
       filter_options = unique(as.character(dat[,column]))
@@ -464,7 +486,7 @@ server <- function(input, output, session) {
     dat = sample_dat()
     group1_filter = group1_criteria()
     if (loaded() & column %in% names(dat)){
-      diffExprData$group1_samples <- dat[dat[,column] == group1_filter, 'well_name']
+      diffExprData$group1_samples <- dat[dat[,column] == group1_filter, 'Sample_ID']
     }
   })
   
@@ -473,7 +495,7 @@ server <- function(input, output, session) {
     dat = sample_dat()
     group2_filter = group2_criteria()
     if (loaded() & column %in% names(dat)){
-      diffExprData$group2_samples <- dat[dat[,column] == group2_filter, 'well_name']
+      diffExprData$group2_samples <- dat[dat[,column] == group2_filter, 'Sample_ID']
     }
   })
   
@@ -495,14 +517,14 @@ server <- function(input, output, session) {
     b = group2()
     group1_filter = group1_criteria()
     group2_filter = group2_criteria()
-    column = volcano_column()
+    column = 'condition_group_time'
     count_data = counts_dat()
     sample_data = sample_dat()
     
     # Format for DESeq
     count_data$entrez_id = NULL
-    row.names(sample_data) = sample_data$well_name
-    sample_data$well_name = NULL
+    row.names(sample_data) = sample_data$Sample_ID
+    sample_data$Sample_ID = NULL
     
     if (!is.null(count_data) & !is.null(sample_data)
         & !is.null(a) & !is.null(b) & !is.null(column)
@@ -524,24 +546,44 @@ server <- function(input, output, session) {
         
       } else{
         
+        # DESeq METHOD
+        dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
+                                      colData = sample_data_tmp,
+                                      design = ~condition_group_time)
+        dds <- DESeq(object = dds)
+        
+        cont = c('condition_group_time', group1_filter, group2_filter)
+        
+        res = results(dds,
+                      contrast = cont,
+                      pAdjustMethod = "fdr",
+                      cooksCutoff = FALSE)
+        
+        deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
+        deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
+        deg_tab$Gene = as.character(deg_tab$Gene)
+        names(deg_tab)[-1] = c('AvgExpr', 'logFC', 'adj.P.Val')
+        deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+        
+        # VOOM METHOD
         # Voom it up
-        model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
-        colnames(model_matrix) = c(group1_filter, group2_filter)
-        count_data_voomed = voom(count_data_tmp, model_matrix)
+        #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
+        #colnames(model_matrix) = c(group1_filter, group2_filter)
+        #count_data_voomed = voom(count_data_tmp, model_matrix)
         
         # Contrasts
-        contrasts_cmd = paste0('makeContrasts(', group1_filter, 
-                               '-', group2_filter, ', levels = model_matrix)')
-        contrasts = eval(parse(text=contrasts_cmd))
+        #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
+        #                       '-', group2_filter, ', levels = model_matrix)')
+        #contrasts = eval(parse(text=contrasts_cmd))
         
         # Differential expression
-        fit = lmFit(count_data_voomed, model_matrix)
-        fit2 = contrasts.fit(fit, contrasts = contrasts)
-        fit2 = eBayes(fit2)
-        deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
-        deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
-        deg_tab$Gene = as.character(deg_tab$Gene)
-        deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+        #fit = lmFit(count_data_voomed, model_matrix)
+        #fit2 = contrasts.fit(fit, contrasts = contrasts)
+        #fit2 = eBayes(fit2)
+        #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
+        #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
+        #deg_tab$Gene = as.character(deg_tab$Gene)
+        #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
         
         # Save table to prevent re-creating it in the same session
         write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
@@ -675,7 +717,7 @@ server <- function(input, output, session) {
       df$Gene = sapply(gene_names, function(s){
         HTML(paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?gene=", s, "' target='_blank'>", s,"</a>"))
       })
-      df = df[,c('Gene', 'adj.P.Val', 'logFC', 'AveExpr')]
+      df = df[,c('Gene', 'adj.P.Val', 'logFC', 'AvgExpr')]
       names(df)[2] = c('adjPVal')
       
       # Add protein links
@@ -687,7 +729,7 @@ server <- function(input, output, session) {
       
       # Round
       df$logFC = round(as.numeric(df$logFC), 3)
-      df$AveExpr = round(as.numeric(df$AveExpr), 3)
+      df$AvgExpr = round(as.numeric(df$AvgExpr), 3)
       df$adjPVal = formatC(df$adjPVal, format = "e", digits = 3)
       
       # Display
@@ -820,7 +862,6 @@ server <- function(input, output, session) {
                             actionLink('info_diffexpr_modal', label = 'What is this?',
                                        style = 'font-size: 8pt; color: #27adde;')),
             width = 6,
-            height = 600,
             div(style = 'padding-left: 20px;',
                 p(style='color: #D2D6DD;', "Click on a gene's row to display its boxplot to the right")),
             div(withSpinner(dataTableOutput('table_differential_expression'),
@@ -833,7 +874,6 @@ server <- function(input, output, session) {
         ),
         box(title = "Box and whisker plot",
             width = 6,
-            height = 600,
             div(style = 'padding-left: 20px;',
                 p(style='color: #D2D6DD;', "Hover over a point to see the sample name")),
             div(withSpinner(plotlyOutput('gene_boxplot'),
