@@ -126,7 +126,7 @@ AuthenticatedUI <- dashboardPage(
         style = 'font-size: 8pt; margin: 0px 5px 20px 0px;'),
     sidebarMenu(
       menuItem("Samples overview", tabName = "tab_samples", icon = icon("vial")),
-      #menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar")),
+      menuItem("Differential expression", tabName = "tab_diff_expr", icon = icon("chart-bar")),
       menuItem("Expression profiling", tabName = "tab_expr_profiles", icon = icon("th")),
       menuItem("Pathway enrichment", tabName = "tab_pathway_enrichment", icon = icon("align-left")),
       menuItem("Biomarkers analysis", tabName = "tab_biomarkers", icon = icon("share-alt")),
@@ -225,7 +225,14 @@ AuthenticatedUI <- dashboardPage(
       tabItem(tabName = "tab_diff_expr",
               h2('Differential Expression'),
               fluidRow(
-                box(title = "Set parameters for analysis",
+                box(title = tagList("Set parameters for analysis",
+                                    HTML('&nbsp;&nbsp;'),
+                                    tags$i(
+                                      class = "fa fa-info-circle", 
+                                      style = "color: #27adde; font-size: 8pt;"
+                                    ),
+                                    actionLink('info_preproc_modal', label = 'How was my data preprocessed?',
+                                               style = 'font-size: 8pt; color: #27adde;')),
                     div(style = 'padding-left: 20px;',
                         p(style='color: #D2D6DD;', 'Select the criteria for comparing two sample groups')
                     ),
@@ -249,7 +256,7 @@ AuthenticatedUI <- dashboardPage(
                     div(style = 'padding-left: 20px; width: 440px;',
                         verbatimTextOutput('group1_group2_selected', F),
                         div(style = 'color: #D2D6DD;',
-                          helpText('The comparison is performed as "Group A vs Group B," so we recommend setting Group B as your control.')
+                          uiOutput('message_diff_expr')
                         )
                     ),
                     div(style = 'padding-top: 40px; padding-left: 20px; clear: left;',

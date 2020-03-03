@@ -100,6 +100,10 @@ server <- function(input, output, session) {
   
   # Get user profile
   profile_response <- get_synapse_user_profile()
+  observeEvent(get_synapse_user_profile(), {
+    query_string = paste0(getQueryString(), '&uid=', user_id)
+    updateQueryString(query_string, mode = 'replace')
+  })
   
   # Get the user's teams
   teams_response <- get_synapse_teams(user_id)
@@ -274,12 +278,13 @@ server <- function(input, output, session) {
     if (!is.null(proj)){
       color_choices = color_columns()
       shape_choices = shape_columns()
+      sample_metadata = sample_dat()
       updateRadioButtons(session, 'umap_color_by', 
                          choices = color_choices, selected = color_choices[1])
       updateRadioButtons(session, 'umap_shape_by', 
                          choices = shape_choices, selected = shape_choices[2])
       updateSelectInput(session, 'select_volcano_column', 
-                        choices = 'condition_group_time', selected = 'condition_group_time')
+                        choices = names(sample_metadata), selected = names(sample_metadata)[2])
     }
   })
   
@@ -339,7 +344,6 @@ server <- function(input, output, session) {
         names(plot_df)[(ncol(plot_df)-1):ncol(plot_df)] = c('V1', 'V2')
         
         # Make sure the color & shape columns are factors
-        View(plot_df)
         plot_df[,color_column] = as.factor(plot_df[,color_column])
         plot_df[,shape_column] = as.factor(plot_df[,shape_column])
         n_colors = length(unique(plot_df[,color_column]))
@@ -452,13 +456,14 @@ server <- function(input, output, session) {
   
   # ------------------------- Tab 2: Diff Expr ------------------------- #
   
-  diffExprData <- reactiveValues(group1_samples = NULL,
+  diffExprData <- reactiveValues(message = NULL,
+                                 group1_samples = NULL,
                                  group2_samples = NULL,
                                  diff_expr_result = NULL,
                                  diff_expr_csv = NULL,
                                  boxplot_df = NULL)
   
-  volcano_column <- reactive({ return('condition_group_time') })
+  volcano_column <- reactive({ input$select_volcano_column })
   group1_criteria <- reactive({ input$select_group1_criteria })
   group2_criteria <- reactive({ input$select_group2_criteria })
   group1 <- reactive({ diffExprData$group1_samples })
@@ -467,16 +472,53 @@ server <- function(input, output, session) {
   most_recent_result <- reactive({ diffExprData$diff_expr_result })
   most_recent_boxplot <- reactive({ diffExprData$boxplot_df })
   
-  observeEvent(loaded(), {
-    column = 'condition_group_time'
-    dat = sample_dat()
-    if (loaded() & column %in% names(dat)){
-      filter_options = unique(as.character(dat[,column]))
+  observeEvent(input$info_preproc_modal, {
+    showModal(
+      modalDialog(title = paste0(selected_project(), " - gene expression data preprocessing"),
+                  p('This table contains annotations describing each sample used in the experiment. The data was 
+                    uploaded to Synapse and can be modified on Synapse if corrections are needed. The color and shape 
+                    parameters for the UMAP plot above are dynamically generated from the column names of this file, 
+                    so column names can vary as needed by experiment as long as the sample ID is in the first column.'),
+                  easyClose = T,
+                  footer = NULL)
+    )
+  })
+  
+  output$message_diff_expr <- renderUI({
+    msg = 'The comparison is performed as "Group A vs Group B," so we recommend setting Group B as your control.'
+    if (!is.null(diffExprData$message)){
+      msg = diffExprData$message
+    }
+    return(helpText(msg))
+  })
+  
+  observeEvent(selected_project(), {
+    proj = selected_project()
+    if (!is.null(proj)){
+      dat = sample_dat()
+      all_columns = names(dat)
+      initial_column = all_columns[2]
+      
+      # Set volano column choices, and initial column selected
+      updateSelectInput(session, 'select_volcano_column', 
+                        choices = all_columns, selected = initial_column)
+    }
+  })
+  
+  observeEvent(volcano_column(), {
+    
+    selected_column = volcano_column()
+    
+    if (!is.null(selected_column) & selected_column != 'Loading...'){
+      dat = sample_dat()
+      
+      # Allow the unique values in that column to be used as filter options
+      filter_options = unique(as.character(dat[,selected_column]))
       updateSelectInput(session, 'select_group1_criteria', 
-                        label = paste0('Group A ', column, ' ='),
+                        label = paste0('Group A ', selected_column, ' ='),
                         choices = filter_options, selected = filter_options[1])
       updateSelectInput(session, 'select_group2_criteria', 
-                        label = paste0('Group B ', column, ' ='),
+                        label = paste0('Group B ', selected_column, ' ='),
                         choices = filter_options, selected = filter_options[2])
     }
   })
@@ -487,6 +529,11 @@ server <- function(input, output, session) {
     group1_filter = group1_criteria()
     if (loaded() & column %in% names(dat)){
       diffExprData$group1_samples <- dat[dat[,column] == group1_filter, 'Sample_ID']
+      if (length(diffExprData$group1_samples) < 6 | length(diffExprData$group2_samples) < 6){
+        diffExprData$message <- 'Too few samples to perform analysis. Please select another group with at least 6 samples.'
+      } else{
+        diffExprData$message <- NULL
+      }
     }
   })
   
@@ -496,6 +543,11 @@ server <- function(input, output, session) {
     group2_filter = group2_criteria()
     if (loaded() & column %in% names(dat)){
       diffExprData$group2_samples <- dat[dat[,column] == group2_filter, 'Sample_ID']
+      if (length(diffExprData$group1_samples) < 6 | length(diffExprData$group2_samples) < 6){
+        diffExprData$message <- 'Too few samples to perform analysis. Please select another comparison with at least 6 samples per group.'
+      } else{
+        diffExprData$message <- NULL
+      }
     }
   })
   
@@ -513,87 +565,102 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$button_run_volcano, {
+    
+    METHOD = 'DESeq2'
+      
     a = group1()
     b = group2()
-    group1_filter = group1_criteria()
-    group2_filter = group2_criteria()
-    column = 'condition_group_time'
-    count_data = counts_dat()
-    sample_data = sample_dat()
     
-    # Format for DESeq
-    count_data$entrez_id = NULL
-    row.names(sample_data) = sample_data$Sample_ID
-    sample_data$Sample_ID = NULL
-    
-    if (!is.null(count_data) & !is.null(sample_data)
-        & !is.null(a) & !is.null(b) & !is.null(column)
-        & !is.null(group1_filter) & !is.null(group2_filter)){
+    if (length(a) > 6 & length(b > 6)){
+      group1_filter = group1_criteria()
+      group2_filter = group2_criteria()
+      column = volcano_column()
+      count_data = counts_dat()
+      sample_data = sample_dat()
       
-      out_filename = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.csv')
-      diffExprData$diff_expr_csv <- out_filename
-      out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
+      # Add a _1 to gene symbols that are duplicated
+      count_data$Gene_Symbol = make.unique(as.character(count_data$Gene_Symbol), sep = "_")
       
-      # Trigger new boxplot
-      count_data_tmp = count_data[,c(a, b)]
-      sample_data_tmp = sample_data[c(a, b),]
-      count_data_tmp2 = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
-      names(count_data_tmp2)[1] = column
-      diffExprData$boxplot_df <- count_data_tmp2
+      # Format for DESeq
+      row.names(sample_data) = sample_data$Sample_ID
+      sample_data$Sample_ID = NULL
+      row.names(count_data) = count_data$Gene_Symbol
+      count_data$Gene_Symbol = NULL
       
-      if (file.exists(out_filename)){
-        deg_tab = read.csv(out_filename, stringsAsFactors = F)
+      if (!is.null(count_data) & !is.null(sample_data)
+          & !is.null(a) & !is.null(b) & !is.null(column)
+          & !is.null(group1_filter) & !is.null(group2_filter)){
         
-      } else{
+        out_filename = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.csv')
+        diffExprData$diff_expr_csv <- out_filename
+        out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
         
-        # DESeq METHOD
-        dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
-                                      colData = sample_data_tmp,
-                                      design = ~condition_group_time)
-        dds <- DESeq(object = dds)
+        # Trigger new boxplot
+        count_data_tmp = count_data[,c(a, b)]
+        sample_data_tmp = sample_data[c(a, b),]
+        count_data_tmp2 = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
+        names(count_data_tmp2)[1] = column
+        diffExprData$boxplot_df <- count_data_tmp2
         
-        cont = c('condition_group_time', group1_filter, group2_filter)
-        
-        res = results(dds,
-                      contrast = cont,
-                      pAdjustMethod = "fdr",
-                      cooksCutoff = FALSE)
-        
-        deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
-        deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
-        deg_tab$Gene = as.character(deg_tab$Gene)
-        names(deg_tab)[-1] = c('AvgExpr', 'logFC', 'adj.P.Val')
-        deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
-        
-        # VOOM METHOD
-        # Voom it up
-        #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
-        #colnames(model_matrix) = c(group1_filter, group2_filter)
-        #count_data_voomed = voom(count_data_tmp, model_matrix)
-        
-        # Contrasts
-        #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
-        #                       '-', group2_filter, ', levels = model_matrix)')
-        #contrasts = eval(parse(text=contrasts_cmd))
-        
-        # Differential expression
-        #fit = lmFit(count_data_voomed, model_matrix)
-        #fit2 = contrasts.fit(fit, contrasts = contrasts)
-        #fit2 = eBayes(fit2)
-        #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
-        #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
-        #deg_tab$Gene = as.character(deg_tab$Gene)
-        #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
-        
-        # Save table to prevent re-creating it in the same session
-        write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
-        
-        # Save methods file
-        generate_volcano_methods(group1_filter, length(a), 
-                                 group2_filter, length(b))
-        
+        if (file.exists(out_filename)){
+          deg_tab = read.csv(out_filename, stringsAsFactors = F)
+          
+        } else{
+          
+          if (METHOD == 'DESeq2'){
+            
+            # DESeq2 METHOD
+            dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
+                                          colData = sample_data_tmp,
+                                          design = as.formula(paste0('~ ', column)))
+            dds <- DESeq(object = dds)
+            
+            cont = c(column, group1_filter, group2_filter)
+            
+            res = results(dds,
+                          contrast = cont,
+                          pAdjustMethod = "fdr",
+                          cooksCutoff = FALSE)
+            
+            deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
+            deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
+            deg_tab$Gene = as.character(deg_tab$Gene)
+            names(deg_tab)[-1] = c('AvgExpr', 'logFC', 'adj.P.Val')
+            deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+            
+          } else {
+          
+            # VOOM METHOD
+            # Voom it up
+            #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
+            #colnames(model_matrix) = c(group1_filter, group2_filter)
+            #count_data_voomed = voom(count_data_tmp, model_matrix)
+            
+            # Contrasts
+            #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
+            #                       '-', group2_filter, ', levels = model_matrix)')
+            #contrasts = eval(parse(text=contrasts_cmd))
+            
+            # Differential expression
+            #fit = lmFit(count_data_voomed, model_matrix)
+            #fit2 = contrasts.fit(fit, contrasts = contrasts)
+            #fit2 = eBayes(fit2)
+            #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
+            #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
+            #deg_tab$Gene = as.character(deg_tab$Gene)
+            #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+          }
+          
+          # Save table to prevent re-creating it in the same session
+          write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
+          
+          # Save methods file
+          generate_volcano_methods(group1_filter, length(a), 
+                                   group2_filter, length(b))
+          
+        }
+        diffExprData$diff_expr_result <- deg_tab
       }
-      diffExprData$diff_expr_result <- deg_tab
     }
   })
   
