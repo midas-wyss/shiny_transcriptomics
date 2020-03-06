@@ -145,7 +145,14 @@ AuthenticatedUI <- dashboardPage(
   dashboardBody(
     tags$head(includeHTML('www/analytics.html'),
               HTML(drift_js),
-              tags$style(".shiny-output-error{color: white;}"),
+              tags$style(".shiny-output-error { color: white; }
+                          .progress-bar { background-color: #00aeed; }
+                          .shiny-notification {
+                            position: fixed;
+                            top: 70%;
+                            left: 40%;
+                            right: 40%;"
+              ),
               HTML('<link rel="icon" href="www/favicon.ico" type="image/x-icon"/>')),
     tabItems(
       tabItem(tabName = "tab_samples",

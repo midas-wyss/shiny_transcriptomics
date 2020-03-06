@@ -40,12 +40,12 @@ if (!dir.exists('data')){
 # ------------------------ Virtualenv setup -------------------------- #
 if (Sys.info()[['sysname']] != 'Darwin'){
   # When running on shinyapps.io, create a virtualenv 
-  reticulate::virtualenv_create(envname = 'python35_txn_env', 
+  reticulate::virtualenv_create(envname = 'python37_txn_env', 
                                 python = '/usr/bin/python3')
-  reticulate::virtualenv_install('python35_txn_env', 
+  reticulate::virtualenv_install('python37_txn_env', 
                                  packages = c('synapseclient', 'requests'))
 }
-reticulate::use_virtualenv('python35_txn_env', required = T)
+reticulate::use_virtualenv('python37_txn_env', required = T)
 reticulate::source_python('connect_to_synapse.py')
 
 # ---------------------------- OAuth --------------------------------- #
@@ -196,7 +196,7 @@ server <- function(input, output, session) {
     write.table(txt, out_file, sep = '\t', row.names = F, quote = F, col.names = F)
   }
   
-  generate_volcano_methods <- function(a, numa, b, numb){
+  generate_volcano_methods <- function(a, numa, b, numb, method){
     in_file = 'data/methods/deg.txt'
     out_file = 'data/methods/deg_filled.txt'
     txt = read.table(in_file, sep = '|', stringsAsFactors = F)
@@ -529,8 +529,8 @@ server <- function(input, output, session) {
     group1_filter = group1_criteria()
     if (loaded() & column %in% names(dat)){
       diffExprData$group1_samples <- dat[dat[,column] == group1_filter, 'Sample_ID']
-      if (length(diffExprData$group1_samples) < 6 | length(diffExprData$group2_samples) < 6){
-        diffExprData$message <- 'Too few samples to perform analysis. Please select another group with at least 6 samples.'
+      if (length(diffExprData$group1_samples) < 2 | length(diffExprData$group2_samples) < 2){
+        diffExprData$message <- 'Too few samples to perform analysis. Please select another group with at least 2 samples.'
       } else{
         diffExprData$message <- NULL
       }
@@ -543,8 +543,8 @@ server <- function(input, output, session) {
     group2_filter = group2_criteria()
     if (loaded() & column %in% names(dat)){
       diffExprData$group2_samples <- dat[dat[,column] == group2_filter, 'Sample_ID']
-      if (length(diffExprData$group1_samples) < 6 | length(diffExprData$group2_samples) < 6){
-        diffExprData$message <- 'Too few samples to perform analysis. Please select another comparison with at least 6 samples per group.'
+      if (length(diffExprData$group1_samples) < 2 | length(diffExprData$group2_samples) < 2){
+        diffExprData$message <- 'Too few samples to perform analysis. Please select another comparison with at least 2 samples per group.'
       } else{
         diffExprData$message <- NULL
       }
@@ -566,19 +566,23 @@ server <- function(input, output, session) {
   
   observeEvent(input$button_run_volcano, {
     
-    METHOD = 'DESeq2'
+    withProgress(message = 'Running differential expression analysis', value = 0, {
       
-    a = group1()
-    b = group2()
-    
-    if (length(a) > 6 & length(b > 6)){
+      a = group1()
+      b = group2()
+      
+      diff_expr_method = 'DESeq2'
+      
+      # Increment the progress bar, and update the detail text
+      incProgress(0.2, detail = 'Formatting data')
+      
       group1_filter = group1_criteria()
       group2_filter = group2_criteria()
       column = volcano_column()
       count_data = counts_dat()
       sample_data = sample_dat()
-      
-      # Add a _1 to gene symbols that are duplicated
+        
+      # Add a _# to gene symbols that are duplicated
       count_data$Gene_Symbol = make.unique(as.character(count_data$Gene_Symbol), sep = "_")
       
       # Format for DESeq
@@ -591,77 +595,85 @@ server <- function(input, output, session) {
           & !is.null(a) & !is.null(b) & !is.null(column)
           & !is.null(group1_filter) & !is.null(group2_filter)){
         
-        out_filename = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.csv')
+        out_filename = paste0('data/diff_expr_', group1_filter, '_vs_', group2_filter, '.csv')
+        out_filename_counts = paste0('data/diff_expr_', group1_filter, '_vs_', group2_filter, '_counts.csv')
         diffExprData$diff_expr_csv <- out_filename
-        out_rnk = paste0('data/diff_expr_', column, '_', group1_filter, '_vs_', group2_filter, '.rnk')
+        out_rnk = paste0('data/diff_expr_', group1_filter, '_vs_', group2_filter, '.rnk')
         
-        # Trigger new boxplot
         count_data_tmp = count_data[,c(a, b)]
         sample_data_tmp = sample_data[c(a, b),]
-        count_data_tmp2 = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
-        names(count_data_tmp2)[1] = column
-        diffExprData$boxplot_df <- count_data_tmp2
         
-        if (file.exists(out_filename)){
-          deg_tab = read.csv(out_filename, stringsAsFactors = F)
+        if (length(a) > 1 & length(b) > 1){
           
-        } else{
+          incProgress(0.2, detail = 'Setting up comparisons (<30 sec)')
           
-          if (METHOD == 'DESeq2'){
+          if (file.exists(out_filename)){
+            deg_tab = read.csv(out_filename, stringsAsFactors = F)
+            boxplot_tab = read.csv(out_filename_counts, stringsAsFactors = F)
             
-            # DESeq2 METHOD
-            dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
-                                          colData = sample_data_tmp,
-                                          design = as.formula(paste0('~ ', column)))
-            dds <- DESeq(object = dds)
+          } else{
+              incProgress(0.3, detail = 'Performing analysis (~30 sec)')
             
-            cont = c(column, group1_filter, group2_filter)
-            
-            res = results(dds,
-                          contrast = cont,
-                          pAdjustMethod = "fdr",
-                          cooksCutoff = FALSE)
-            
-            deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
-            deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
-            deg_tab$Gene = as.character(deg_tab$Gene)
-            names(deg_tab)[-1] = c('AvgExpr', 'logFC', 'adj.P.Val')
-            deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
-            
-          } else {
-          
-            # VOOM METHOD
-            # Voom it up
-            #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
-            #colnames(model_matrix) = c(group1_filter, group2_filter)
-            #count_data_voomed = voom(count_data_tmp, model_matrix)
-            
-            # Contrasts
-            #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
-            #                       '-', group2_filter, ', levels = model_matrix)')
-            #contrasts = eval(parse(text=contrasts_cmd))
-            
-            # Differential expression
-            #fit = lmFit(count_data_voomed, model_matrix)
-            #fit2 = contrasts.fit(fit, contrasts = contrasts)
-            #fit2 = eBayes(fit2)
-            #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
-            #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
-            #deg_tab$Gene = as.character(deg_tab$Gene)
-            #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+              # DESeq2 METHOD
+              dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
+                                            colData = sample_data_tmp,
+                                            design = as.formula(paste0('~ ', column)))
+              dds <- DESeq(object = dds)
+              
+              cont = c(column, group1_filter, group2_filter)
+              
+              res = results(dds,
+                            contrast = cont,
+                            pAdjustMethod = "fdr",
+                            cooksCutoff = FALSE)
+              
+              deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
+              deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
+              deg_tab$Gene = as.character(deg_tab$Gene)
+              names(deg_tab)[-1] = c('AvgExpr', 'log2FC', 'adjPVal')
+              deg_tab = deg_tab[order(deg_tab$adjPVal, decreasing = F),]
+              
+              # Trigger new boxplot (with normalized counts)
+              norm_counts <- counts(dds, normalized = TRUE)
+              boxplot_tab = as.data.frame(cbind(sample_data_tmp[,column], t(norm_counts)))
+              names(boxplot_tab)[1] = column
+              
+              # VOOM METHOD
+              # Voom it up
+              #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
+              #colnames(model_matrix) = c(group1_filter, group2_filter)
+              #count_data_voomed = voom(count_data_tmp, model_matrix)
+              
+              # Contrasts
+              #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
+              #                       '-', group2_filter, ', levels = model_matrix)')
+              #contrasts = eval(parse(text=contrasts_cmd))
+              
+              # Differential expression
+              #fit = lmFit(count_data_voomed, model_matrix)
+              #fit2 = contrasts.fit(fit, contrasts = contrasts)
+              #fit2 = eBayes(fit2)
+              #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
+              #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
+              #deg_tab$Gene = as.character(deg_tab$Gene)
+              #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+              
+              # Save table to prevent re-creating it in the same session
+              write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
+              write.table(boxplot_tab, out_filename_counts, sep = ',', row.names = F, quote = F)
+              
+              # Save methods file
+              generate_volcano_methods(group1_filter, length(a), 
+                                       group2_filter, length(b),
+                                       diff_expr_method)
+              
           }
-          
-          # Save table to prevent re-creating it in the same session
-          write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
-          
-          # Save methods file
-          generate_volcano_methods(group1_filter, length(a), 
-                                   group2_filter, length(b))
-          
+          incProgress(0.2, detail = 'Finalizing (<30 sec)')
+          diffExprData$diff_expr_result <- deg_tab
+          diffExprData$boxplot_df <- boxplot_tab
         }
-        diffExprData$diff_expr_result <- deg_tab
       }
-    }
+    })
   })
   
   observeEvent(input$info_volcano_modal, {
@@ -713,16 +725,16 @@ server <- function(input, output, session) {
     
     if (!is.null(deg_results)){
       
-      deg_results$log10pval = -log10(deg_results$adj.P.Val)
-      deg_results$sig = ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC > upper_fc_cutoff, 'increased',
-                               ifelse(deg_results$adj.P.Val < p_cutoff & deg_results$logFC < lower_fc_cutoff, 'decreased', 
+      deg_results$log10pval = -log10(deg_results$adjPVal)
+      deg_results$sig = ifelse(deg_results$adjPVal < p_cutoff & deg_results$log2FC > upper_fc_cutoff, 'increased',
+                               ifelse(deg_results$adjPVal < p_cutoff & deg_results$log2FC < lower_fc_cutoff, 'decreased', 
                                       'not significant'))
       
       plot_cols = c(PLOT_COLORS[2], '#3aa4a9', '#C3C5C7')
       names(plot_cols) = c('increased', 'decreased', 'not significant')
       
       # Plot
-      p <- plot_ly(data = deg_results, x = ~logFC, y = ~log10pval,
+      p <- plot_ly(data = deg_results, x = ~log2FC, y = ~log10pval,
                    color = ~sig, 
                    colors = plot_cols,
                    text = ~Gene,
@@ -740,7 +752,7 @@ server <- function(input, output, session) {
       
       # Save plot as PDF
       pdf('data/diffexpr_volcano.pdf', height = 8, width = 6)
-      volcano_plot(deg_results$logFC, deg_results$adj.P.Val, 
+      volcano_plot(deg_results$log2FC, deg_results$adjPVal, 
                    p_adj_threshold = p_cutoff, 
                    plot_main = paste0(group1_filter, ' vs ', group2_filter))
       legend('bottomright', bg = 'white',
@@ -784,8 +796,7 @@ server <- function(input, output, session) {
       df$Gene = sapply(gene_names, function(s){
         HTML(paste0("<a href='https://www.genecards.org/cgi-bin/carddisp.pl?gene=", s, "' target='_blank'>", s,"</a>"))
       })
-      df = df[,c('Gene', 'adj.P.Val', 'logFC', 'AvgExpr')]
-      names(df)[2] = c('adjPVal')
+      df = df[,c('Gene', 'adjPVal', 'log2FC', 'AvgExpr')]
       
       # Add protein links
       df$Protein = sapply(gene_names, function(s){
@@ -795,14 +806,13 @@ server <- function(input, output, session) {
       })
       
       # Round
-      df$logFC = round(as.numeric(df$logFC), 3)
+      df$log2FC = round(as.numeric(df$log2FC), 3)
       df$AvgExpr = round(as.numeric(df$AvgExpr), 3)
       df$adjPVal = formatC(df$adjPVal, format = "e", digits = 3)
       
       # Display
       return(datatable(df, rownames = F, 
                        selection = 'single',
-                       options = list(dom = 't'),
                        style = 'bootstrap', escape = F))
     } else{
       return(NULL)
@@ -871,7 +881,7 @@ server <- function(input, output, session) {
            layout(showlegend = FALSE,
                   title = gene,
                   xaxis = list(title = 'Sample Group'),
-                  yaxis = list(title = paste0(gene, ' (gene counts)')))
+                  yaxis = list(title = paste0(gene, ' (log2 normalized counts)')))
       
       # Save plot as PDF
       pdf(paste0('data/gene_boxplot_', gene, '.pdf'), 
@@ -879,7 +889,7 @@ server <- function(input, output, session) {
       boxplot(get(gene)~get(group_column), data = boxplot_df,
               col = 'lightgrey', las = 1,
               main = gene, xlab = '',
-              ylab = paste0(gene, ' (counts)'))
+              ylab = paste0(gene, ' (log2 normalized counts)'))
       points(get(gene)~get(group_column), data = boxplot_df,
              pch = 21, bg = boxplot_cols[boxplot_df$Color_ID])
       dev.off()
