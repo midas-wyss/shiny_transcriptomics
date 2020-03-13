@@ -40,12 +40,12 @@ if (!dir.exists('data')){
 # ------------------------ Virtualenv setup -------------------------- #
 if (Sys.info()[['sysname']] != 'Darwin'){
   # When running on shinyapps.io, create a virtualenv 
-  reticulate::virtualenv_create(envname = 'python37_txn_env', 
+  reticulate::virtualenv_create(envname = 'python35_txn_env', 
                                 python = '/usr/bin/python3')
-  reticulate::virtualenv_install('python37_txn_env', 
+  reticulate::virtualenv_install('python35_txn_env', 
                                  packages = c('synapseclient', 'requests'))
 }
-reticulate::use_virtualenv('python37_txn_env', required = T)
+reticulate::use_virtualenv('python35_txn_env', required = T)
 reticulate::source_python('connect_to_synapse.py')
 
 # ---------------------------- OAuth --------------------------------- #
@@ -116,10 +116,12 @@ server <- function(input, output, session) {
   PROJECT_DROPDOWN_LIST = list()
   ALL_ANALYSES = list()
   for (team_id in enabled_teams){
-    project = PROJECT_CONFIG[[team_id]]
-    PROJECT_DROPDOWN_LIST[project$project_name] = list(names(project$analyses))
-    for (analysis in names(project$analyses)){
-      ALL_ANALYSES[[analysis]] = c(PROJECT_CONFIG[[team_id]][['analyses']][[analysis]])
+    projects = PROJECT_CONFIG[[team_id]]
+    for (project in projects){
+      PROJECT_DROPDOWN_LIST[project$project_name] = list(names(project$analyses))
+      for (analysis in names(project$analyses)){
+        ALL_ANALYSES[[analysis]] = c(PROJECT_CONFIG[[team_id]][[project$project_name]][['analyses']][[analysis]])
+      }
     }
   }
   
@@ -219,6 +221,7 @@ server <- function(input, output, session) {
                                    sample_shape_columns = NULL,
                                    gene_counts_df = NULL,
                                    umap_df = NULL,
+                                   platform = NULL,
                                    data_loaded = F)
   
   # Load the projects the user has access to
@@ -251,6 +254,7 @@ server <- function(input, output, session) {
       experimentData$umap_df <- read.csv(umap_csv,
                                          row.names = 1,
                                          stringsAsFactors = F)
+      experimentData$platform <- ANALYSIS$platform
       experimentData$data_loaded <- T
       
       # Extract colorable columns from column names
@@ -269,6 +273,7 @@ server <- function(input, output, session) {
   sample_dat <- reactive({ experimentData$sample_metadata_df })
   counts_dat <- reactive({ experimentData$gene_counts_df })
   umap_dat <- reactive({ experimentData$umap_df })
+  platform <- reactive({ experimentData$platform })
   loaded <- reactive({ experimentData$data_loaded })
   color_columns <- reactive({ experimentData$sample_color_columns })
   shape_columns <- reactive({ experimentData$sample_shape_columns })
@@ -282,7 +287,7 @@ server <- function(input, output, session) {
       updateRadioButtons(session, 'umap_color_by', 
                          choices = color_choices, selected = color_choices[1])
       updateRadioButtons(session, 'umap_shape_by', 
-                         choices = shape_choices, selected = shape_choices[2])
+                         choices = shape_choices, selected = shape_choices[length(shape_choices)])
       updateSelectInput(session, 'select_volcano_column', 
                         choices = names(sample_metadata), selected = names(sample_metadata)[2])
     }
@@ -519,7 +524,7 @@ server <- function(input, output, session) {
                         choices = filter_options, selected = filter_options[1])
       updateSelectInput(session, 'select_group2_criteria', 
                         label = paste0('Group B ', selected_column, ' ='),
-                        choices = filter_options, selected = filter_options[2])
+                        choices = filter_options, selected = filter_options[length(filter_options)])
     }
   })
   
@@ -580,18 +585,18 @@ server <- function(input, output, session) {
       group2_filter = group2_criteria()
       column = volcano_column()
       count_data = counts_dat()
-      sample_data = sample_dat()
+      sample_metadata = sample_dat()
         
       # Add a _# to gene symbols that are duplicated
       count_data$Gene_Symbol = make.unique(as.character(count_data$Gene_Symbol), sep = "_")
       
-      # Format for DESeq
-      row.names(sample_data) = sample_data$Sample_ID
-      sample_data$Sample_ID = NULL
+      # Format for DESeg2
+      row.names(sample_metadata) = sample_metadata$Sample_ID
+      sample_metadata$Sample_ID = NULL
       row.names(count_data) = count_data$Gene_Symbol
       count_data$Gene_Symbol = NULL
       
-      if (!is.null(count_data) & !is.null(sample_data)
+      if (!is.null(count_data) & !is.null(sample_metadata)
           & !is.null(a) & !is.null(b) & !is.null(column)
           & !is.null(group1_filter) & !is.null(group2_filter)){
         
@@ -601,7 +606,7 @@ server <- function(input, output, session) {
         out_rnk = paste0('data/diff_expr_', group1_filter, '_vs_', group2_filter, '.rnk')
         
         count_data_tmp = count_data[,c(a, b)]
-        sample_data_tmp = sample_data[c(a, b),]
+        sample_data_tmp = sample_metadata[c(a, b),]
         
         if (length(a) > 1 & length(b) > 1){
           
@@ -612,51 +617,71 @@ server <- function(input, output, session) {
             boxplot_tab = read.csv(out_filename_counts, stringsAsFactors = F)
             
           } else{
-              incProgress(0.3, detail = 'Performing analysis (~30 sec)')
+              incProgress(0.3, detail = 'Performing analysis (~1 min)')
             
-              # DESeq2 METHOD
-              dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
-                                            colData = sample_data_tmp,
-                                            design = as.formula(paste0('~ ', column)))
-              dds <- DESeq(object = dds)
+              # If there's only one column, need to transform back into a 2D df
+              if (is.null(dim(sample_data_tmp))){
+                sample_data_tmp = data.frame(sample_data_tmp, stringsAsFactors = F)
+                names(sample_data_tmp) = column
+              }
+            
+              plat = platform()
               
-              cont = c(column, group1_filter, group2_filter)
+              if (plat == 'rnaseq'){
+            
+                # DESeq2 METHOD
+                dds <- DESeqDataSetFromMatrix(countData = count_data_tmp,
+                                              colData = sample_data_tmp,
+                                              design = as.formula(paste0('~ ', column)))
+                dds <- DESeq(object = dds)
+                
+                cont = c(column, group1_filter, group2_filter)
+                
+                res = results(dds,
+                              contrast = cont,
+                              pAdjustMethod = "fdr",
+                              cooksCutoff = FALSE)
+                
+                deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
+                deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
+                deg_tab$Gene = as.character(deg_tab$Gene)
+                names(deg_tab)[-1] = c('AvgExpr', 'log2FC', 'adjPVal')
+                deg_tab = deg_tab[order(deg_tab$adjPVal, decreasing = F),]
+                
+                # Trigger new boxplot (with normalized counts)
+                norm_counts <- counts(dds, normalized = TRUE)
+                boxplot_tab = as.data.frame(cbind(sample_data_tmp[,column], t(norm_counts)))
+                names(boxplot_tab)[1] = column
+                
+              } else if (plat == 'microarray'){
               
-              res = results(dds,
-                            contrast = cont,
-                            pAdjustMethod = "fdr",
-                            cooksCutoff = FALSE)
-              
-              deg_tab = data.frame(res[,c('baseMean', 'log2FoldChange', 'padj')])
-              deg_tab = cbind(Gene = row.names(deg_tab), deg_tab)
-              deg_tab$Gene = as.character(deg_tab$Gene)
-              names(deg_tab)[-1] = c('AvgExpr', 'log2FC', 'adjPVal')
-              deg_tab = deg_tab[order(deg_tab$adjPVal, decreasing = F),]
-              
-              # Trigger new boxplot (with normalized counts)
-              norm_counts <- counts(dds, normalized = TRUE)
-              boxplot_tab = as.data.frame(cbind(sample_data_tmp[,column], t(norm_counts)))
-              names(boxplot_tab)[1] = column
-              
-              # VOOM METHOD
-              # Voom it up
-              #model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
-              #colnames(model_matrix) = c(group1_filter, group2_filter)
-              #count_data_voomed = voom(count_data_tmp, model_matrix)
-              
-              # Contrasts
-              #contrasts_cmd = paste0('makeContrasts(', group1_filter, 
-              #                       '-', group2_filter, ', levels = model_matrix)')
-              #contrasts = eval(parse(text=contrasts_cmd))
-              
-              # Differential expression
-              #fit = lmFit(count_data_voomed, model_matrix)
-              #fit2 = contrasts.fit(fit, contrasts = contrasts)
-              #fit2 = eBayes(fit2)
-              #deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
-              #deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
-              #deg_tab$Gene = as.character(deg_tab$Gene)
-              #deg_tab = deg_tab[order(deg_tab$adj.P.Val, decreasing = F),]
+                # Limma
+                model_matrix = model.matrix(~0 + as.factor(sample_data_tmp[,column]))
+                colnames(model_matrix) = c(group1_filter, group2_filter)
+                
+                # Contrasts
+                contrasts_cmd = paste0('makeContrasts(', group1_filter, 
+                                       '-', group2_filter, ', levels = model_matrix)')
+                contrasts = eval(parse(text=contrasts_cmd))
+                
+                # Differential expression
+                fit = lmFit(count_data_tmp, model_matrix)
+                fit2 = contrasts.fit(fit, contrasts = contrasts)
+                fit2 = eBayes(fit2)
+                deg_tab = topTable(fit2, number = 100000, adjust = 'fdr')
+                deg_tab = data.frame(Gene = row.names(deg_tab), deg_tab)
+                deg_tab$Gene = as.character(deg_tab$Gene)
+                deg_tab = deg_tab[,c(1,3,2,6)]
+                names(deg_tab)[-1] = c('AvgExpr', 'log2FC', 'adjPVal')
+                deg_tab = deg_tab[order(deg_tab$adjPVal, decreasing = F),]
+                
+                # Trigger new boxplot (with normalized counts)
+                boxplot_tab = as.data.frame(cbind(sample_data_tmp[,column], t(count_data_tmp)))
+                names(boxplot_tab)[1] = column
+                
+              } else{
+                cat(paste0('Unrecognized platform: ', plat))
+              }
               
               # Save table to prevent re-creating it in the same session
               write.table(deg_tab, out_filename, sep = ',', row.names = F, quote = F)
@@ -943,7 +968,7 @@ server <- function(input, output, session) {
                 p(style='color: #D2D6DD;', "Click on a gene's row to display its boxplot to the right")),
             div(withSpinner(dataTableOutput('table_differential_expression'),
                             type = 4, color = '#27adde')),
-            div(style = 'padding-left: 20px; padding-top: 52px;',
+            div(style = 'padding-left: 20px; padding-top: 52px; padding-bottom: 20px;',
                 downloadButton('download_diff_expr_table', 'Download full table (.csv)',
                                style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
             border-radius: 5px;')
@@ -955,7 +980,7 @@ server <- function(input, output, session) {
                 p(style='color: #D2D6DD;', "Hover over a point to see the sample name")),
             div(withSpinner(plotlyOutput('gene_boxplot'),
                             type = 4, color = '#27adde')),
-            div(style = 'padding-left: 20px; padding-top: 65px;',
+            div(style = 'padding-left: 20px; padding-top: 65px; padding-bottom: 20px;',
                 downloadButton('download_boxplot_pdf', 'Download boxplot (.pdf)',
                                style = 'color: #ffffff; background-color: #27adde; border-color: #1ea0cf;
             border-radius: 5px;')
