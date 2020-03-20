@@ -26,13 +26,15 @@ PROJECT_CONFIG <- list(
           metadata = 'syn21645214',
           counts = 'syn21645216',
           umap = 'syn21645215',
-          platform = 'rnaseq'
+          platform = 'rnaseq',
+          notes = 'syn21771933'
         ),
         'Alveolus' = list(
           metadata = 'syn21641066',
           counts = 'syn21641065',
           umap = 'syn21641108',
-          platform = 'rnaseq'
+          platform = 'rnaseq',
+          notes = NULL
         )
       )
     ),
@@ -40,16 +42,18 @@ PROJECT_CONFIG <- list(
       project_name = 'COPD + Smoking',
       analyses = list(
         'Benam 2017 chip - GSE87098' = list(
-          metadata = '',
-          counts = '',
-          umap = '',
-          platform = 'microarray'
+          metadata = 'syn21766074',
+          counts = 'syn21766075',
+          umap = 'syn21766080',
+          platform = 'microarray',
+          notes = NULL
         ),
         'Harvey 2007 clinical - GSE4498' = list(
-          metadata = '',
-          counts = '',
-          umap = '',
-          platform = 'microarray'
+          metadata = 'syn21766070',
+          counts = 'syn21766071',
+          umap = 'syn21766072',
+          platform = 'microarray',
+          notes = NULL
         )
       )
     )
@@ -57,14 +61,22 @@ PROJECT_CONFIG <- list(
   
   # Ingber Gates EED Team
   team_3406002 = list(
-    'Gates EED Transcriptomics' = list(
-      project_name = 'Gates EED Transcriptomics',
+    'Gates Transcriptomics' = list(
+      project_name = 'Gates Transcriptomics',
       analyses = list(
-        'Gates EED Transcriptomics' = list(
+        'EED vs Healthy (with ND)' = list(
           metadata = 'syn21761311',
           counts = 'syn21761312',
           umap = 'syn21765942',
-          platform = 'microarray'
+          platform = 'microarray',
+          notes = NULL
+        ),
+        'AZM vs Control (with N/T def)' = list(
+          metadata = 'syn21785559',
+          counts = 'syn21785560',
+          umap = 'syn21785561',
+          platform = 'microarray',
+          notes = NULL
         )
       )
     )
@@ -79,13 +91,15 @@ PROJECT_CONFIG <- list(
           metadata = 'syn21645211',
           counts = 'syn21645213',
           umap = 'syn21645212',
-          platform = 'rnaseq'
+          platform = 'rnaseq',
+          notes = NULL
         ),
         'Example Analysis 2' = list(
           metadata = 'syn21645211',
           counts = 'syn21645213',
           umap = 'syn21645212',
-          platform = 'rnaseq'
+          platform = 'rnaseq',
+          notes = NULL
         )
       )
     )
